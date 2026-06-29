@@ -1,0 +1,11 @@
+spring:
+  datasource:
+    url: ${OSH_DB_URL:jdbc:postgresql://127.0.0.1:5432/osh_release}
+    username: ${OSH_DB_USERNAME:osh_release}
+    password: ${OSH_DB_PASSWORD:osh_release}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+

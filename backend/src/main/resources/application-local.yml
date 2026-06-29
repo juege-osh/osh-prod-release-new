@@ -1,0 +1,10 @@
+spring:
+  datasource:
+    url: jdbc:h2:file:./data/osh-release;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: false

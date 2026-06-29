@@ -1,0 +1,31 @@
+spring:
+  profiles:
+    active: local
+  jackson:
+    time-zone: Asia/Shanghai
+    serialization:
+      write-dates-as-timestamps: false
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: true
+  flyway:
+    enabled: true
+  mvc:
+    pathmatch:
+      matching-strategy: ant_path_matcher
+
+server:
+  port: 8080
+
+app:
+  jwt:
+    issuer: osh-release-governance
+    secret: ${APP_JWT_SECRET:osh-release-governance-secret-key-change-me}
+    ttl-seconds: ${APP_JWT_TTL_SECONDS:86400}
+  cors:
+    allowed-origins:
+      - "*"

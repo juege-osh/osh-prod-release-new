@@ -1,0 +1,48 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: osh-release-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: osh_release
+      POSTGRES_USER: osh_release
+      POSTGRES_PASSWORD: ${OSH_DB_PASSWORD:-change-me-osh-release}
+    volumes:
+      - osh_release_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U osh_release -d osh_release"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: osh-release-backend
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      OSH_DB_URL: jdbc:postgresql://postgres:5432/osh_release
+      OSH_DB_USERNAME: osh_release
+      OSH_DB_PASSWORD: ${OSH_DB_PASSWORD:-change-me-osh-release}
+      APP_JWT_SECRET: ${APP_JWT_SECRET:-change-this-jwt-secret-before-prod}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${OSH_RELEASE_BACKEND_PORT:-18080}:8080"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: osh-release-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${OSH_RELEASE_WEB_PORT:-18081}:80"
+
+volumes:
+  osh_release_pg:
