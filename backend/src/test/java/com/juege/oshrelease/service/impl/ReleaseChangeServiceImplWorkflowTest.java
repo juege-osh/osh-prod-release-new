@@ -130,6 +130,8 @@ class ReleaseChangeServiceImplWorkflowTest {
         assertEquals(Boolean.TRUE, reports.get("dataPassed"));
         assertEquals(Boolean.TRUE, reports.get("envDiffGenerated"));
         assertEquals(Boolean.TRUE, reports.get("announceChecked"));
+        assertEquals(Boolean.TRUE, reports.get("readyForGreen"));
+        assertTrue(((List<?>) reports.get("blockers")).isEmpty());
         assertTrue(String.valueOf(reports.get("prodSafety")).contains("安全模式"));
         assertTrue(fixture.testEnvironment().isAnnounceFileExists());
 

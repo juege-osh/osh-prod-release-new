@@ -124,6 +124,16 @@ class ReleaseChangeServiceImplFlowTest {
         ReleaseChangeDetailDTO data = service.dataTest(created.id);
         assertTrue(data.reports.stream().anyMatch(item -> "DATA".equals(item.reportType) && item.passed));
 
+        service.envDiff(created.id);
+        service.announceCheck(created.id);
+        MapResult readyReports = new MapResult(service.reports(created.id));
+        assertTrue(readyReports.booleanValue("specPassed"));
+        assertTrue(readyReports.booleanValue("functionalPassed"));
+        assertTrue(readyReports.booleanValue("dataPassed"));
+        assertTrue(readyReports.booleanValue("envDiffGenerated"));
+        assertTrue(readyReports.booleanValue("announceChecked"));
+        assertTrue(readyReports.booleanValue("readyForGreen"));
+
         ReleaseChangeDetailDTO switched = service.switchGreen(created.id);
         assertEquals(ChangeStatus.SWITCHED.name(), switched.status);
         assertEquals("green", fixture.env.getCurrentColor());
@@ -142,14 +152,8 @@ class ReleaseChangeServiceImplFlowTest {
         assertEquals(ChangeStatus.ROLLED_BACK.name(), rolledBack.status);
         assertTrue(rolledBack.operations.stream().anyMatch(item -> "NODE_ROLLBACK".equals(item.operationType)));
 
-        service.envDiff(created.id);
-        service.announceCheck(created.id);
         MapResult reports = new MapResult(service.reports(created.id));
-        assertTrue(reports.booleanValue("specPassed"));
-        assertTrue(reports.booleanValue("functionalPassed"));
-        assertTrue(reports.booleanValue("dataPassed"));
-        assertTrue(reports.booleanValue("envDiffGenerated"));
-        assertTrue(reports.booleanValue("announceChecked"));
+        assertFalse(reports.booleanValue("readyForGreen"));
     }
 
     @Test
@@ -205,6 +209,75 @@ class ReleaseChangeServiceImplFlowTest {
         service.validateSpecs(created.id);
         ReleaseChangeDetailDTO function = service.functionTest(created.id);
         assertTrue(function.reports.stream().anyMatch(item -> "FUNCTION".equals(item.reportType)));
+    }
+
+    @Test
+    void switchGreenShouldRequireEnvDiffAndAnnounceReports() {
+        Fixture fixture = new Fixture(ReleaseType.NORMAL);
+        ReleaseChangeServiceImpl service = fixture.service;
+
+        ReleaseChangeCreateRequest createRequest = new ReleaseChangeCreateRequest();
+        createRequest.title = "release gate";
+        createRequest.releaseType = ReleaseType.NORMAL;
+        createRequest.targetEnvCode = "prod";
+        createRequest.targetColor = "green";
+        createRequest.developerUsername = "reviewer_a";
+        createRequest.developerDisplayName = "评审 A";
+        createRequest.demoRequired = true;
+        createRequest.riskLevel = "HIGH";
+        createRequest.summary = "gate";
+        createRequest.componentKeys = Collections.singletonList("mysql");
+        createRequest.contentJson = "{}";
+
+        ReleaseChangeDetailDTO created = service.create(createRequest);
+        service.submit(created.id);
+
+        ReleaseChangeOperationRequest demo = new ReleaseChangeOperationRequest();
+        demo.reviewerUsername = "reviewer_b";
+        demo.reviewerDisplayName = "评审 B";
+        demo.actorUsername = "reviewer_a";
+        demo.actorDisplayName = "评审 A";
+        demo.comment = "demo";
+        service.demo(created.id, demo);
+
+        ReleaseChangeOperationRequest reviewA = new ReleaseChangeOperationRequest();
+        reviewA.reviewerUsername = "reviewer_a";
+        reviewA.reviewerDisplayName = "评审 A";
+        reviewA.passed = true;
+        service.approve(created.id, reviewA);
+        ReleaseChangeOperationRequest reviewB = new ReleaseChangeOperationRequest();
+        reviewB.reviewerUsername = "reviewer_b";
+        reviewB.reviewerDisplayName = "评审 B";
+        reviewB.passed = true;
+        service.approve(created.id, reviewB);
+        ReleaseChangeOperationRequest juege = new ReleaseChangeOperationRequest();
+        juege.reviewerUsername = "juege";
+        juege.reviewerDisplayName = "觉哥";
+        juege.passed = true;
+        service.approve(created.id, juege);
+
+        ensureReviewerEvidence(service, created.id, created.items.get(0).id, "reviewer_a", "评审 A", "test", "mysql A");
+        ensureReviewerEvidence(service, created.id, created.items.get(0).id, "reviewer_b", "评审 B", "prod-green", "mysql B");
+
+        service.validateSpecs(created.id);
+        service.functionTest(created.id);
+        service.dataTest(created.id);
+
+        MapResult blockedReports = new MapResult(service.reports(created.id));
+        assertFalse(blockedReports.booleanValue("readyForGreen"));
+        com.juege.oshrelease.common.BusinessException blocked = assertThrows(
+                com.juege.oshrelease.common.BusinessException.class,
+                () -> service.switchGreen(created.id)
+        );
+        assertTrue(blocked.getMessage().contains("环境差异报告"));
+
+        service.envDiff(created.id);
+        service.announceCheck(created.id);
+
+        MapResult readyReports = new MapResult(service.reports(created.id));
+        assertTrue(readyReports.booleanValue("readyForGreen"));
+        ReleaseChangeDetailDTO switched = service.switchGreen(created.id);
+        assertEquals(ChangeStatus.SWITCHED.name(), switched.status);
     }
 
     @Test

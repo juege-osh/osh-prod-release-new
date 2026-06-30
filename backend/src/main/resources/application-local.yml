@@ -8,3 +8,10 @@ spring:
     hibernate:
       ddl-auto: none
     show-sql: false
+
+app:
+  seed-users:
+    juege-password: ${OSH_SEED_JUEGE_PASSWORD:Juege@2026}
+    reviewer-a-password: ${OSH_SEED_REVIEWER_A_PASSWORD:Review@2026}
+    reviewer-b-password: ${OSH_SEED_REVIEWER_B_PASSWORD:Review@2026}
+    ops-password: ${OSH_SEED_OPS_PASSWORD:Ops@2026}

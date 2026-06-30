@@ -8,9 +8,8 @@
 git clone https://github.com/juege-osh/osh-prod-release-new.git
 cd osh-prod-release-new
 git checkout release/20260708
-export OSH_DB_PASSWORD='请换成强密码'
-export APP_JWT_SECRET='请换成 32 位以上随机串'
-export OSH_RELEASE_WEB_PORT=18081
+cp .env.example .env
+# 编辑 .env，填好 OSH_DB_PASSWORD、APP_JWT_SECRET 和 4 个治理台账号密码
 docker compose up -d --build
 ```
 
@@ -94,6 +93,8 @@ docker compose up -d --build
 ## 生产保护
 
 这个版本不会自动 SSH 到生产执行命令。即使页面点了“切绿”“同步蓝”或“回滚”，也只是写治理库状态和操作证据。
+
+生产 profile 启动前会检查 `APP_JWT_SECRET`、`OSH_DB_PASSWORD` 和 4 个种子用户密码。少配或使用默认弱值会直接启动失败。本地 `local` profile 只用于演练。
 
 要接入真实生产执行，需要再单独加执行器，并至少满足：
 

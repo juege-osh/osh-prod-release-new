@@ -400,10 +400,10 @@ public class ReleaseChangeServiceImpl implements com.juege.oshrelease.service.Re
         if (change.getStatus() != ChangeStatus.APPROVED && change.getStatus() != ChangeStatus.TESTING) {
             throw new BusinessException("必须审批通过后才能切绿");
         }
-        if (!hasPassedReport(id, "FUNCTION") || !hasPassedReport(id, "DATA")) {
-            throw new BusinessException("必须先通过功能测试和数据量对比");
+        List<String> blockers = releaseBlockers(change);
+        if (!blockers.isEmpty()) {
+            throw new BusinessException("暂不能切绿：" + blockers.get(0));
         }
-        ensureReviewerEvidence(change);
         Environment env = environmentRepository.findByEnvCode(change.getTargetEnvCode())
                 .orElseThrow(() -> new BusinessException("目标环境不存在"));
         if (!env.isSupportsBlueGreen()) {
@@ -510,13 +510,16 @@ public class ReleaseChangeServiceImpl implements com.juege.oshrelease.service.Re
     @Override
     public Map<String, Object> reports(Long id) {
         ReleaseChange change = getChange(id);
+        List<String> blockers = releaseBlockers(change);
         Map<String, Object> result = new LinkedHashMap<String, Object>();
         result.put("change", toDetail(change));
         result.put("specPassed", hasPassedReport(id, "SPEC"));
         result.put("functionalPassed", hasPassedReport(id, "FUNCTION"));
         result.put("dataPassed", hasPassedReport(id, "DATA"));
-        result.put("envDiffGenerated", hasReport(id, "ENV_DIFF"));
-        result.put("announceChecked", hasReport(id, "ANNOUNCE"));
+        result.put("envDiffGenerated", hasPassedReport(id, "ENV_DIFF"));
+        result.put("announceChecked", hasPassedReport(id, "ANNOUNCE"));
+        result.put("readyForGreen", blockers.isEmpty());
+        result.put("blockers", blockers);
         result.put("prodSafety", "治理台默认安全模式：不直接修改生产业务库，不直接改网关切流。");
         return result;
     }
@@ -848,6 +851,41 @@ public class ReleaseChangeServiceImpl implements com.juege.oshrelease.service.Re
             }
         }
         return false;
+    }
+
+    private List<String> releaseBlockers(ReleaseChange change) {
+        List<String> blockers = new ArrayList<String>();
+        if (change.getStatus() != ChangeStatus.TESTING && change.getStatus() != ChangeStatus.SWITCHED
+                && change.getStatus() != ChangeStatus.VERIFIED && change.getStatus() != ChangeStatus.RELEASED) {
+            blockers.add("变更单还没有进入自动化测试通过后的阶段");
+        }
+        if (!hasPassedReport(change.getId(), "SPEC")) {
+            blockers.add("缺少通过的组件规范校验报告");
+        }
+        if (!hasPassedReport(change.getId(), "FUNCTION")) {
+            blockers.add("缺少通过的功能测试报告");
+        }
+        if (!hasPassedReport(change.getId(), "DATA")) {
+            blockers.add("缺少通过的数据量对比报告");
+        }
+        if (!hasPassedReport(change.getId(), "ENV_DIFF")) {
+            blockers.add("缺少通过的测试和生产环境差异报告");
+        }
+        if (!hasPassedReport(change.getId(), "ANNOUNCE")) {
+            blockers.add("缺少通过的 announce 检查报告");
+        }
+        for (ReleaseChangeItem item : releaseChangeItemRepository.findByChangeIdOrderByItemOrderAsc(change.getId())) {
+            if (!"PASSED".equals(item.getSpecStatus())) {
+                blockers.add(item.getComponentName() + " 组件规范未通过");
+            }
+            if (!item.isReviewerAConfirmed() || !item.isReviewerBConfirmed()) {
+                blockers.add(item.getComponentName() + " 缺少两位评审测试证据");
+            }
+            if (change.getReleaseType() == ReleaseType.URGENT && !item.isJuegeConfirmed()) {
+                blockers.add(item.getComponentName() + " 紧急上线缺少觉哥对子 change 的确认");
+            }
+        }
+        return blockers;
     }
 
     private void saveReport(Long changeId, String type, String title, String summary, String detailJson, String aiVerdict, boolean passed) {

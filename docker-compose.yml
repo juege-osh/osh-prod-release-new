@@ -6,7 +6,7 @@ services:
     environment:
       POSTGRES_DB: osh_release
       POSTGRES_USER: osh_release
-      POSTGRES_PASSWORD: ${OSH_DB_PASSWORD:-change-me-osh-release}
+      POSTGRES_PASSWORD: ${OSH_DB_PASSWORD:?set-osh-db-password}
     volumes:
       - osh_release_pg:/var/lib/postgresql/data
     healthcheck:
@@ -25,8 +25,12 @@ services:
       SPRING_PROFILES_ACTIVE: prod
       OSH_DB_URL: jdbc:postgresql://postgres:5432/osh_release
       OSH_DB_USERNAME: osh_release
-      OSH_DB_PASSWORD: ${OSH_DB_PASSWORD:-change-me-osh-release}
-      APP_JWT_SECRET: ${APP_JWT_SECRET:-change-this-jwt-secret-before-prod}
+      OSH_DB_PASSWORD: ${OSH_DB_PASSWORD:?set-osh-db-password}
+      APP_JWT_SECRET: ${APP_JWT_SECRET:?set-app-jwt-secret}
+      OSH_SEED_JUEGE_PASSWORD: ${OSH_SEED_JUEGE_PASSWORD:?set-osh-seed-juege-password}
+      OSH_SEED_REVIEWER_A_PASSWORD: ${OSH_SEED_REVIEWER_A_PASSWORD:?set-osh-seed-reviewer-a-password}
+      OSH_SEED_REVIEWER_B_PASSWORD: ${OSH_SEED_REVIEWER_B_PASSWORD:?set-osh-seed-reviewer-b-password}
+      OSH_SEED_OPS_PASSWORD: ${OSH_SEED_OPS_PASSWORD:?set-osh-seed-ops-password}
     depends_on:
       postgres:
         condition: service_healthy

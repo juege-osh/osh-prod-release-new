@@ -415,6 +415,29 @@ dd {
   background: rgba(255, 252, 242, 0.56);
 }
 
+.gate-card {
+  margin: 14px 0;
+  padding: 16px;
+  border: 1px solid rgba(182, 66, 50, 0.28);
+  border-radius: 18px;
+  background: rgba(255, 237, 226, 0.72);
+}
+
+.gate-card.ready {
+  border-color: rgba(33, 122, 84, 0.35);
+  background: rgba(225, 244, 231, 0.72);
+}
+
+.gate-card strong {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.gate-card ul {
+  margin: 10px 0 0;
+  padding-left: 20px;
+}
+
 .component-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }

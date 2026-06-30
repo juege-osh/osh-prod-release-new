@@ -48,6 +48,7 @@ public class BootstrapServiceImpl implements BootstrapService {
     private final ReleaseOperationRecordRepository releaseOperationRecordRepository;
     private final TestReportRepository testReportRepository;
     private final PasswordEncoder passwordEncoder;
+    private final org.springframework.core.env.Environment springEnvironment;
 
     public BootstrapServiceImpl(AppUserRepository appUserRepository,
                                 EnvironmentRepository environmentRepository,
@@ -60,7 +61,8 @@ public class BootstrapServiceImpl implements BootstrapService {
                                 ReviewerTestEvidenceRepository reviewerTestEvidenceRepository,
                                 ReleaseOperationRecordRepository releaseOperationRecordRepository,
                                 TestReportRepository testReportRepository,
-                                PasswordEncoder passwordEncoder) {
+                                PasswordEncoder passwordEncoder,
+                                org.springframework.core.env.Environment springEnvironment) {
         this.appUserRepository = appUserRepository;
         this.environmentRepository = environmentRepository;
         this.componentRepository = componentRepository;
@@ -73,6 +75,7 @@ public class BootstrapServiceImpl implements BootstrapService {
         this.releaseOperationRecordRepository = releaseOperationRecordRepository;
         this.testReportRepository = testReportRepository;
         this.passwordEncoder = passwordEncoder;
+        this.springEnvironment = springEnvironment;
     }
 
     @Override
@@ -86,10 +89,10 @@ public class BootstrapServiceImpl implements BootstrapService {
     }
 
     private void seedUsers() {
-        user("juege", "Juege@2026", "觉哥", "OWNER");
-        user("reviewer_a", "Review@2026", "评审 A", "REVIEWER");
-        user("reviewer_b", "Review@2026", "评审 B", "REVIEWER");
-        user("ops", "Ops@2026", "运维同学", "OPS");
+        user("juege", seedPassword("juege", "OSH_SEED_JUEGE_PASSWORD"), "觉哥", "OWNER");
+        user("reviewer_a", seedPassword("reviewer-a", "OSH_SEED_REVIEWER_A_PASSWORD"), "评审 A", "REVIEWER");
+        user("reviewer_b", seedPassword("reviewer-b", "OSH_SEED_REVIEWER_B_PASSWORD"), "评审 B", "REVIEWER");
+        user("ops", seedPassword("ops", "OSH_SEED_OPS_PASSWORD"), "运维同学", "OPS");
     }
 
     private void user(String username, String password, String displayName, String role) {
@@ -97,12 +100,27 @@ public class BootstrapServiceImpl implements BootstrapService {
         AppUser user = existing.orElseGet(AppUser::new);
         user.setUsername(username);
         if (!existing.isPresent()) {
+            if (isBlank(password)) {
+                throw new IllegalStateException("种子用户 " + username + " 密码未配置，请设置对应启动环境变量。");
+            }
             user.setPasswordHash(passwordEncoder.encode(password));
         }
         user.setDisplayName(displayName);
         user.setRole(role);
         user.setEnabled(true);
         appUserRepository.save(user);
+    }
+
+    private String seedPassword(String userKey, String envName) {
+        String password = springEnvironment.getProperty("app.seed-users." + userKey + "-password");
+        if (isBlank(password)) {
+            password = springEnvironment.getProperty(envName);
+        }
+        return password;
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
     }
 
     private void seedEnvironments() {

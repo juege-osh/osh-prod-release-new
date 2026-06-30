@@ -26,6 +26,11 @@ app:
     issuer: osh-release-governance
     secret: ${APP_JWT_SECRET:osh-release-governance-secret-key-change-me}
     ttl-seconds: ${APP_JWT_TTL_SECONDS:86400}
+  seed-users:
+    juege-password: ${OSH_SEED_JUEGE_PASSWORD:}
+    reviewer-a-password: ${OSH_SEED_REVIEWER_A_PASSWORD:}
+    reviewer-b-password: ${OSH_SEED_REVIEWER_B_PASSWORD:}
+    ops-password: ${OSH_SEED_OPS_PASSWORD:}
   cors:
     allowed-origins:
       - "*"

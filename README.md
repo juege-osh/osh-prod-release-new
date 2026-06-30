@@ -13,7 +13,7 @@
 - 评审 B：`reviewer_b`
 - 运维：`ops`
 
-密码不在仓库正文里重复写，按本机启动环境或种子配置来。
+本地开发 profile 带默认演练密码；Docker/生产部署必须在 `.env` 里显式配置。
 
 ## 本地运行
 
@@ -34,6 +34,8 @@ npm run dev
 Docker：
 
 ```bash
+cp .env.example .env
+# 编辑 .env，填好数据库、JWT 和 4 个治理台账号密码
 docker compose up -d --build
 ```
 

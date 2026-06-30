@@ -232,6 +232,13 @@
           <article v-if="selectedChange" class="report-card">
             <h4>{{ selectedChange.changeCode }}</h4>
             <p>{{ selectedChange.finalMessage }}</p>
+            <div v-if="releaseGate" class="gate-card" :class="{ ready: releaseGate.readyForGreen }">
+              <strong>{{ releaseGate.readyForGreen ? '可以切绿' : '暂不能切绿' }}</strong>
+              <p>{{ releaseGate.prodSafety }}</p>
+              <ul v-if="releaseGate.blockers && releaseGate.blockers.length">
+                <li v-for="blocker in releaseGate.blockers" :key="blocker">{{ blocker }}</li>
+              </ul>
+            </div>
             <pre>{{ prettyReports }}</pre>
           </article>
         </section>
@@ -241,7 +248,7 @@
 </template>
 
 <script setup>
-import { computed, h, onMounted, ref } from 'vue'
+import { computed, h, onMounted, ref, watch } from 'vue'
 import { api, post, setToken as persistToken, getToken } from './api'
 
 const token = ref(getToken())
@@ -255,6 +262,7 @@ const environments = ref([])
 const components = ref([])
 const changes = ref([])
 const selectedChange = ref(null)
+const releaseGate = ref(null)
 const viewMode = ref('table')
 const loginForm = ref({ username: 'juege', password: '' })
 const editingItem = ref(null)
@@ -319,6 +327,7 @@ async function refreshAll() {
 
 async function loadChange(id) {
   selectedChange.value = await api(`/changes/${id}`)
+  releaseGate.value = page.value === 'reports' ? await api(`/changes/${id}/reports`) : null
 }
 
 async function createChange() {
@@ -463,6 +472,7 @@ async function saveItem() {
 async function operate(path, message, body) {
   await run(async () => {
     selectedChange.value = await post(path, body || {})
+    releaseGate.value = null
     await refreshAll()
     notice.value = message
   })
@@ -481,6 +491,14 @@ async function run(task) {
 onMounted(async () => {
   if (token.value) {
     await refreshAll()
+  }
+})
+
+watch(page, async (nextPage) => {
+  if (nextPage === 'reports' && selectedChange.value) {
+    await run(async () => {
+      releaseGate.value = await api(`/changes/${selectedChange.value.id}/reports`)
+    })
   }
 })
 
