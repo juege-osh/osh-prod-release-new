@@ -146,7 +146,13 @@
                   {{ mode.label }}
                 </button>
               </div>
-              <NodeTable v-if="viewMode === 'table'" :nodes="selectedChange.nodes" :items="selectedChange.items" @edit-item="openItemEditor" />
+              <NodeTable
+                v-if="viewMode === 'table'"
+                :nodes="selectedChange.nodes"
+                :items="selectedChange.items"
+                @edit-item="openItemEditor"
+                @operate-item="operateItem"
+              />
               <NodeTree v-if="viewMode === 'tree'" :nodes="selectedChange.nodes" :items="selectedChange.items" />
               <NodeGraph v-if="viewMode === 'graph'" :nodes="selectedChange.nodes" :items="selectedChange.items" />
               <form v-if="creatingItem" class="item-editor payload-editor" @submit.prevent="createItem">
@@ -584,6 +590,32 @@ async function saveItem() {
   editingItem.value = null
 }
 
+async function operateItem(payload) {
+  const { item, action } = payload
+  if (!item || !item.id) {
+    error.value = '找不到上线项'
+    return
+  }
+  const labels = {
+    analyze: '上线项分析已生成',
+    'dry-run': 'dry-run 已记录',
+    execute: '绿环境执行记录已保存',
+    verify: '验证结果已保存',
+    rollback: '单项回滚已记录'
+  }
+  const body = {
+    actorUsername: item.ownerUsername || 'ops',
+    actorDisplayName: item.ownerDisplayName || '运维同学',
+    environmentCode: 'prod',
+    targetColor: 'green',
+    result: `${item.title || item.componentName} ${labels[action] || action}`,
+    evidence: `${item.itemType || 'COMPONENT'}：${item.payloadPath || item.componentKey}，安全模式只记录治理证据。`,
+    passed: true,
+    safeMode: true
+  }
+  await operate(`/changes/${selectedChange.value.id}/items/${item.id}/${action}`, labels[action] || '上线项操作已记录', body)
+}
+
 function defaultItemForm(itemType) {
   const normalized = itemType || 'SQL'
   const componentKey = normalized === 'SQL' ? 'mysql' : normalized === 'CODE' ? 'java-backend' : 'nacos'
@@ -673,17 +705,21 @@ watch(page, async (nextPage) => {
 
 const NodeTable = {
   props: ['nodes', 'items'],
-  emits: ['edit-item'],
+  emits: ['edit-item', 'operate-item'],
   methods: {
     findItem(node) {
       return (this.items || []).find((item) => item.componentKey === node.componentKey && item.itemOrder === node.nodeOrder)
         || (this.items || []).find((item) => item.componentKey === node.componentKey)
         || {}
+    },
+    shortText(value) {
+      const text = value || '-'
+      return text.length > 80 ? `${text.slice(0, 80)}...` : text
     }
   },
   render() {
     return h('table', { class: 'node-table' }, [
-      h('thead', [h('tr', ['顺序', '类型', '组件/上线项', '负责人', '载荷', '规范', '双评审', '动作', '状态', '回滚顺序', '编辑'].map((text) => h('th', text)))]),
+      h('thead', [h('tr', ['顺序', '类型', '组件/上线项', '负责人', '载荷/风险', '规范', '双评审', '节点状态', '上线项状态', '单项操作', '编辑'].map((text) => h('th', text)))]),
       h('tbody', this.nodes.map((node) => {
         const item = this.findItem(node)
         return h('tr', [
@@ -694,12 +730,21 @@ const NodeTable = {
           h('small', { class: 'block-muted' }, node.componentName)
         ]),
         h('td', item.ownerDisplayName || '-'),
-        h('td', item.payloadPath || '-'),
+        h('td', [
+          h('small', { class: 'block-muted strong-muted' }, item.payloadPath || '-'),
+          h('small', { class: 'block-muted' }, this.shortText(item.riskAnalysis))
+        ]),
         h('td', item.specStatus || '-'),
         h('td', item.reviewerAConfirmed && item.reviewerBConfirmed ? '已齐' : '缺证据'),
-        h('td', node.actionType),
         h('td', node.status),
-        h('td', node.rollbackOrder),
+        h('td', item.lifecycleStatus || '-'),
+        h('td', h('div', { class: 'item-actions' }, [
+          h('button', { class: 'mini-button', onClick: () => this.$emit('operate-item', { item, action: 'analyze' }) }, '分析'),
+          h('button', { class: 'mini-button', onClick: () => this.$emit('operate-item', { item, action: 'dry-run' }) }, 'dry-run'),
+          h('button', { class: 'mini-button', onClick: () => this.$emit('operate-item', { item, action: 'execute' }) }, '执行'),
+          h('button', { class: 'mini-button', onClick: () => this.$emit('operate-item', { item, action: 'verify' }) }, '验证'),
+          h('button', { class: 'mini-button danger-mini', onClick: () => this.$emit('operate-item', { item, action: 'rollback' }) }, '回滚')
+        ])),
         h('td', h('button', { class: 'mini-button', onClick: () => this.$emit('edit-item', item) }, '编辑'))
       ])
       }))

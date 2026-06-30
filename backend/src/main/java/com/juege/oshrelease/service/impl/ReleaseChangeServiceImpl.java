@@ -12,6 +12,7 @@ import com.juege.oshrelease.dto.ReleaseChangeItemUpdateRequest;
 import com.juege.oshrelease.dto.ReleaseChangeListItemDTO;
 import com.juege.oshrelease.dto.ReleaseChangeOperationRequest;
 import com.juege.oshrelease.dto.ReleaseChangeQueryRequest;
+import com.juege.oshrelease.dto.ReleaseItemOperationRequest;
 import com.juege.oshrelease.dto.ReleaseNodeDTO;
 import com.juege.oshrelease.dto.ReleaseOperationRecordDTO;
 import com.juege.oshrelease.dto.ReviewerTestEvidenceDTO;
@@ -315,6 +316,118 @@ public class ReleaseChangeServiceImpl implements com.juege.oshrelease.service.Re
 
     @Override
     @Transactional
+    public ReleaseChangeDetailDTO analyzeItem(Long changeId, Long itemId) {
+        ReleaseChange change = getChange(changeId);
+        ReleaseChangeItem item = getItem(changeId, itemId);
+        item.setCodeChangeSummary(analyzeCodeSummary(item));
+        item.setRiskAnalysis(analyzeRisk(item));
+        item.setBugAnalysis(analyzeBugRisk(item));
+        item.setVerificationCommands(analyzeVerificationCommands(item));
+        if (!"PASSED".equals(item.getSpecStatus())) {
+            item.setSpecStatus(validateItemSpec(item) ? "READY" : "NEEDS_FIX");
+        }
+        item.setLifecycleStatus("ANALYZED");
+        releaseChangeItemRepository.save(item);
+        refreshNodesForItem(changeId, item);
+        addOperation(change, "ITEM_ANALYZE", "PASSED", change.getTargetEnvCode(), change.getTargetColor(),
+                item.getOwnerUsername(), item.getOwnerDisplayName(), true,
+                item.getTitle() + " 已生成上线分析。",
+                itemAnalysisDetail(item));
+        change.setCurrentStep("上线项分析已生成");
+        change.setFinalMessage(item.getTitle() + " 已生成改动大纲、风险分析、疑似 bug 和验证清单。");
+        releaseChangeRepository.save(change);
+        return toDetail(change);
+    }
+
+    @Override
+    @Transactional
+    public ReleaseChangeDetailDTO dryRunItem(Long changeId, Long itemId, ReleaseItemOperationRequest request) {
+        ReleaseChange change = getChange(changeId);
+        ReleaseChangeItem item = getItem(changeId, itemId);
+        ensureItemReadyForOperation(item);
+        boolean passed = request == null || request.passed;
+        item.setLifecycleStatus(passed ? "DRY_RUN_PASSED" : "DRY_RUN_FAILED");
+        releaseChangeItemRepository.save(item);
+        markNodeForItem(changeId, item, passed ? "DRY_RUN_PASSED" : "DRY_RUN_FAILED");
+        addOperation(change, "ITEM_DRY_RUN", passed ? "PASSED" : "FAILED",
+                operationEnvironment(change, request), operationColor(change, request),
+                itemActorUsername(item, request), itemActorDisplayName(item, request), true,
+                item.getTitle() + " dry-run " + (passed ? "通过。" : "失败。"),
+                itemOperationDetail(item, request, "dry-run"));
+        change.setCurrentStep(passed ? "上线项 dry-run 已通过" : "上线项 dry-run 失败");
+        change.setFinalMessage(item.getTitle() + (passed ? " dry-run 通过，可以记录绿环境执行。" : " dry-run 失败，不能继续执行。"));
+        releaseChangeRepository.save(change);
+        return toDetail(change);
+    }
+
+    @Override
+    @Transactional
+    public ReleaseChangeDetailDTO executeItem(Long changeId, Long itemId, ReleaseItemOperationRequest request) {
+        ReleaseChange change = getChange(changeId);
+        ReleaseChangeItem item = getItem(changeId, itemId);
+        if (!"DRY_RUN_PASSED".equals(item.getLifecycleStatus()) && !"EXECUTED".equals(item.getLifecycleStatus())
+                && !"VERIFIED".equals(item.getLifecycleStatus())) {
+            throw new BusinessException(item.getTitle() + " 必须先 dry-run 通过");
+        }
+        boolean passed = request == null || request.passed;
+        item.setLifecycleStatus(passed ? "EXECUTED" : "EXECUTE_FAILED");
+        releaseChangeItemRepository.save(item);
+        markNodeForItem(changeId, item, passed ? "EXECUTED" : "FAILED");
+        addOperation(change, "ITEM_EXECUTE", passed ? "RECORDED" : "FAILED",
+                operationEnvironment(change, request), operationColor(change, request),
+                itemActorUsername(item, request), itemActorDisplayName(item, request), true,
+                item.getTitle() + " 绿环境执行记录" + (passed ? "已保存。" : "失败。"),
+                itemOperationDetail(item, request, "execute"));
+        change.setCurrentStep(passed ? "上线项执行记录已保存" : "上线项执行失败");
+        change.setFinalMessage(item.getTitle() + (passed ? " 已记录绿环境执行，等待验证。" : " 执行失败，请回滚或修复。"));
+        releaseChangeRepository.save(change);
+        return toDetail(change);
+    }
+
+    @Override
+    @Transactional
+    public ReleaseChangeDetailDTO verifyItem(Long changeId, Long itemId, ReleaseItemOperationRequest request) {
+        ReleaseChange change = getChange(changeId);
+        ReleaseChangeItem item = getItem(changeId, itemId);
+        if (!"EXECUTED".equals(item.getLifecycleStatus()) && !"VERIFIED".equals(item.getLifecycleStatus())) {
+            throw new BusinessException(item.getTitle() + " 必须先记录执行");
+        }
+        boolean passed = request == null || request.passed;
+        item.setLifecycleStatus(passed ? "VERIFIED" : "VERIFY_FAILED");
+        releaseChangeItemRepository.save(item);
+        markNodeForItem(changeId, item, passed ? "VERIFIED" : "FAILED");
+        addOperation(change, "ITEM_VERIFY", passed ? "PASSED" : "FAILED",
+                operationEnvironment(change, request), operationColor(change, request),
+                itemActorUsername(item, request), itemActorDisplayName(item, request), true,
+                item.getTitle() + " 验证" + (passed ? "通过。" : "失败。"),
+                itemOperationDetail(item, request, "verify"));
+        change.setCurrentStep(passed ? "上线项验证通过" : "上线项验证失败");
+        change.setFinalMessage(item.getTitle() + (passed ? " 已验证通过。" : " 验证失败，优先回蓝或按节点回滚。"));
+        releaseChangeRepository.save(change);
+        return toDetail(change);
+    }
+
+    @Override
+    @Transactional
+    public ReleaseChangeDetailDTO rollbackItem(Long changeId, Long itemId, ReleaseItemOperationRequest request) {
+        ReleaseChange change = getChange(changeId);
+        ReleaseChangeItem item = getItem(changeId, itemId);
+        item.setLifecycleStatus("ROLLED_BACK");
+        releaseChangeItemRepository.save(item);
+        markNodeForItem(changeId, item, "ROLLED_BACK");
+        addOperation(change, "ITEM_ROLLBACK", "RECORDED",
+                operationEnvironment(change, request), operationColor(change, request),
+                itemActorUsername(item, request), itemActorDisplayName(item, request), true,
+                item.getTitle() + " 已记录单项回滚。",
+                itemOperationDetail(item, request, "rollback"));
+        change.setCurrentStep("上线项已按节点回滚");
+        change.setFinalMessage(item.getTitle() + " 已记录回滚，安全模式下未执行生产命令。");
+        releaseChangeRepository.save(change);
+        return toDetail(change);
+    }
+
+    @Override
+    @Transactional
     public ReleaseChangeDetailDTO reviewerTest(Long id, ReviewerTestEvidenceRequest request) {
         ReleaseChange change = getChange(id);
         if (request == null || isBlank(request.reviewerUsername)) {
@@ -410,6 +523,7 @@ public class ReleaseChangeServiceImpl implements com.juege.oshrelease.service.Re
         ensureApprovedOrTesting(change);
         ensureSpecsPassed(id);
         ensureReviewerEvidence(change);
+        ensureItemOperationsReady(change);
         List<ReleaseNode> nodes = releaseNodeRepository.findByChangeIdOrderByNodeOrderAsc(id);
         for (ReleaseNode node : nodes) {
             node.setStatus("PASSED");
@@ -866,6 +980,20 @@ public class ReleaseChangeServiceImpl implements com.juege.oshrelease.service.Re
         }
     }
 
+    private void ensureItemOperationsReady(ReleaseChange change) {
+        for (ReleaseChangeItem item : releaseChangeItemRepository.findByChangeIdOrderByItemOrderAsc(change.getId())) {
+            if (!itemOperationPassed(change.getId(), item, "ITEM_DRY_RUN")) {
+                throw new BusinessException(item.getTitle() + " 缺少 dry-run 通过记录");
+            }
+            if (!itemOperationRecorded(change.getId(), item, "ITEM_EXECUTE")) {
+                throw new BusinessException(item.getTitle() + " 缺少绿环境执行记录");
+            }
+            if (!itemOperationPassed(change.getId(), item, "ITEM_VERIFY")) {
+                throw new BusinessException(item.getTitle() + " 缺少验证通过记录");
+            }
+        }
+    }
+
     private void markItemEvidence(ReleaseChange change, ReleaseChangeItem item, ReviewerTestEvidence evidence) {
         if (isJuege(evidence.getReviewerUsername(), evidence.getReviewerDisplayName())) {
             item.setJuegeConfirmed(true);
@@ -942,11 +1070,46 @@ public class ReleaseChangeServiceImpl implements com.juege.oshrelease.service.Re
             if (!item.isReviewerAConfirmed() || !item.isReviewerBConfirmed()) {
                 blockers.add(item.getComponentName() + " 缺少两位评审测试证据");
             }
+            if (!itemOperationPassed(change.getId(), item, "ITEM_DRY_RUN")) {
+                blockers.add(item.getTitle() + " 缺少 dry-run 通过记录");
+            }
+            if (!itemOperationRecorded(change.getId(), item, "ITEM_EXECUTE")) {
+                blockers.add(item.getTitle() + " 缺少绿环境执行记录");
+            }
+            if (!itemOperationPassed(change.getId(), item, "ITEM_VERIFY")) {
+                blockers.add(item.getTitle() + " 缺少验证通过记录");
+            }
             if (change.getReleaseType() == ReleaseType.URGENT && !item.isJuegeConfirmed()) {
                 blockers.add(item.getComponentName() + " 紧急上线缺少觉哥对子 change 的确认");
             }
         }
         return blockers;
+    }
+
+    private boolean itemOperationPassed(Long changeId, ReleaseChangeItem item, String operationType) {
+        for (ReleaseOperationRecord operation : releaseOperationRecordRepository.findByChangeIdOrderByCreatedAtAsc(changeId)) {
+            if (operationType.equals(operation.getOperationType())
+                    && ("PASSED".equals(operation.getOperationStatus()) || "RECORDED".equals(operation.getOperationStatus()))
+                    && operationMatchesItem(operation, item)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean itemOperationRecorded(Long changeId, ReleaseChangeItem item, String operationType) {
+        for (ReleaseOperationRecord operation : releaseOperationRecordRepository.findByChangeIdOrderByCreatedAtAsc(changeId)) {
+            if (operationType.equals(operation.getOperationType()) && operationMatchesItem(operation, item)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean operationMatchesItem(ReleaseOperationRecord operation, ReleaseChangeItem item) {
+        String detail = defaultText(operation.getDetailJson(), "");
+        return detail.contains("\"itemId\":" + item.getId())
+                || detail.contains("\"itemOrder\":" + item.getItemOrder() + ",\"itemType\":\"" + json(item.getItemType()) + "\"");
     }
 
     private void saveReport(Long changeId, String type, String title, String summary, String detailJson, String aiVerdict, boolean passed) {
@@ -984,6 +1147,26 @@ public class ReleaseChangeServiceImpl implements com.juege.oshrelease.service.Re
         }
     }
 
+    private void markNodeForItem(Long changeId, ReleaseChangeItem item, String status) {
+        ReleaseNode node = findNodeForItem(changeId, item);
+        if (node == null) {
+            return;
+        }
+        node.setStatus(status);
+        node.setDetailJson(itemExecutionDetail(item));
+        releaseNodeRepository.save(node);
+    }
+
+    private ReleaseNode findNodeForItem(Long changeId, ReleaseChangeItem item) {
+        for (ReleaseNode node : releaseNodeRepository.findByChangeIdOrderByNodeOrderAsc(changeId)) {
+            if (node.getComponentKey().equals(item.getComponentKey())
+                    && node.getNodeOrder() == item.getItemOrder()) {
+                return node;
+            }
+        }
+        return null;
+    }
+
     private void refreshNodesForItem(Long changeId, ReleaseChangeItem item) {
         ReleaseNode legacyMatch = null;
         for (ReleaseNode node : releaseNodeRepository.findByChangeIdOrderByNodeOrderAsc(changeId)) {
@@ -1019,6 +1202,15 @@ public class ReleaseChangeServiceImpl implements com.juege.oshrelease.service.Re
             }
         }
         return result;
+    }
+
+    private void ensureItemReadyForOperation(ReleaseChangeItem item) {
+        if (!validateItemSpec(item)) {
+            throw new BusinessException(item.getTitle() + " 缺少执行内容、回滚内容、风险分析或验证命令");
+        }
+        if (isBlank(item.getRollbackContent()) || isBlank(item.getRollbackPlan())) {
+            throw new BusinessException(item.getTitle() + " 缺少回滚内容，不能进入上线");
+        }
     }
 
     private boolean validateItemSpec(ReleaseChangeItem item) {
@@ -1132,6 +1324,105 @@ public class ReleaseChangeServiceImpl implements com.juege.oshrelease.service.Re
             return "先构建和自动化测试；只允许先发绿环境";
         }
         return "先 dry-run，真实执行必须觉哥确认";
+    }
+
+    private String analyzeCodeSummary(ReleaseChangeItem item) {
+        String type = normalizeItemType(item.getItemType());
+        if ("SQL".equals(type)) {
+            return "SQL 改动：" + firstLine(item.getExecutionContent())
+                    + "；回滚：" + firstLine(item.getRollbackContent())
+                    + "；重点看影响表、WHERE 条件、索引和幂等。";
+        }
+        if ("CONFIG".equals(type)) {
+            return "配置改动：" + item.getPayloadPath()
+                    + "；执行内容：" + firstLine(item.getExecutionContent())
+                    + "；重点看刷新方式、默认值和回滚配置。";
+        }
+        if ("CODE".equals(type)) {
+            return "代码改动：" + firstLine(item.getExecutionContent())
+                    + "；必须核对分支、commit 范围、接口兼容、数据库兼容和构建产物。";
+        }
+        return item.getComponentName() + " 增量上线；按组件规范检查配置、数据目录、部署路径和回滚脚本。";
+    }
+
+    private String analyzeRisk(ReleaseChangeItem item) {
+        String text = (defaultText(item.getExecutionContent(), "") + "\n" + defaultText(item.getChangeContent(), "")).toLowerCase();
+        List<String> risks = new ArrayList<String>();
+        if (text.contains("course") || text.contains("课程")) {
+            risks.add("涉及课程模块，数据量对比必须单独确认 0 异常");
+        }
+        if (text.contains("user") || text.contains("用户")) {
+            risks.add("涉及用户模块，数据量对比必须单独确认 0 异常");
+        }
+        if ("SQL".equals(item.getItemType())) {
+            if (text.contains("drop ") || text.contains("truncate ") || text.contains("delete ")) {
+                risks.add("包含高危 SQL，必须先备份并确认 WHERE/影响行数");
+            }
+            if ((text.contains("update ") || text.contains("delete ")) && !text.contains("where")) {
+                risks.add("DML 未看到 WHERE，禁止直接执行");
+            }
+            if (text.contains("alter table")) {
+                risks.add("DDL 可能锁表，必须确认窗口期和回滚方案");
+            }
+        }
+        if ("CONFIG".equals(item.getItemType())) {
+            risks.add("配置发布后要确认刷新方式，避免绿环境和蓝环境配置不一致");
+        }
+        if ("CODE".equals(item.getItemType())) {
+            risks.add("代码发布要确认老版本兼容、缓存对象、枚举字段和前后端字段一致");
+        }
+        if (risks.isEmpty()) {
+            risks.add("未识别到高危关键词，但仍要执行 dry-run、双人验证和回滚演练");
+        }
+        return joinSentences(risks);
+    }
+
+    private String analyzeBugRisk(ReleaseChangeItem item) {
+        String type = normalizeItemType(item.getItemType());
+        if ("SQL".equals(type)) {
+            return "疑似 bug：重复执行、索引名冲突、锁等待、默认值不兼容、老代码读写新字段。";
+        }
+        if ("CONFIG".equals(type)) {
+            return "疑似 bug：配置 key 拼写错误、配置未刷新、蓝绿配置不一致、默认值和代码读取不一致。";
+        }
+        if ("CODE".equals(type)) {
+            return "疑似 bug：空值、并发、枚举不匹配、缓存旧对象、接口字段不兼容、SQL 性能回退。";
+        }
+        return "疑似 bug：健康检查遗漏、脚本幂等不足、回滚脚本和执行脚本不匹配。";
+    }
+
+    private String analyzeVerificationCommands(ReleaseChangeItem item) {
+        String type = normalizeItemType(item.getItemType());
+        if ("SQL".equals(type)) {
+            return "dry-run：EXPLAIN 或事务回滚演练\n验证：检查影响行数、索引、课程/用户表变化为 0\n回滚验证：执行回滚 SQL 后再次检查行数和结构";
+        }
+        if ("CONFIG".equals(type)) {
+            return "dry-run：配置语法校验和 diff\n验证：读取配置接口或健康检查\n回滚验证：恢复上一版配置并确认服务读取旧值";
+        }
+        if ("CODE".equals(type)) {
+            return "dry-run：构建、单测、接口冒烟\n验证：绿环境接口、页面和日志\n回滚验证：切回旧包后重复核心接口检查";
+        }
+        return "dry-run：组件健康检查\n验证：节点状态和接口连通\n回滚验证：按 rollback_order 逆序检查";
+    }
+
+    private String firstLine(String value) {
+        String text = defaultText(value, "");
+        int newline = text.indexOf('\n');
+        if (newline >= 0) {
+            text = text.substring(0, newline);
+        }
+        return limit(text, 120);
+    }
+
+    private String joinSentences(List<String> values) {
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < values.size(); i++) {
+            if (i > 0) {
+                builder.append("；");
+            }
+            builder.append(values.get(i));
+        }
+        return builder.toString();
     }
 
     private String itemExecutionDetail(ReleaseChangeItem item) {
@@ -1313,6 +1604,34 @@ public class ReleaseChangeServiceImpl implements com.juege.oshrelease.service.Re
                 + "\"risk\":\"差异已知，不影响治理台流程\"}";
     }
 
+    private String itemAnalysisDetail(ReleaseChangeItem item) {
+        return "{\"itemId\":" + item.getId()
+                + ",\"itemOrder\":" + item.getItemOrder()
+                + ",\"itemType\":\"" + json(item.getItemType())
+                + "\",\"component\":\"" + json(item.getComponentKey())
+                + "\",\"payloadPath\":\"" + json(item.getPayloadPath())
+                + "\",\"codeChangeSummary\":\"" + json(limit(item.getCodeChangeSummary(), 500))
+                + "\",\"riskAnalysis\":\"" + json(limit(item.getRiskAnalysis(), 500))
+                + "\",\"bugAnalysis\":\"" + json(limit(item.getBugAnalysis(), 500))
+                + "\",\"verificationCommands\":\"" + json(limit(item.getVerificationCommands(), 500))
+                + "\",\"safeMode\":true}";
+    }
+
+    private String itemOperationDetail(ReleaseChangeItem item, ReleaseItemOperationRequest request, String phase) {
+        return "{\"phase\":\"" + json(phase)
+                + "\",\"itemId\":" + item.getId()
+                + ",\"itemOrder\":" + item.getItemOrder()
+                + ",\"itemType\":\"" + json(item.getItemType())
+                + "\",\"component\":\"" + json(item.getComponentKey())
+                + "\",\"payloadPath\":\"" + json(item.getPayloadPath())
+                + "\",\"executionContent\":\"" + json(limit(item.getExecutionContent(), 500))
+                + "\",\"rollbackContent\":\"" + json(limit(item.getRollbackContent(), 500))
+                + "\",\"result\":\"" + json(defaultText(request == null ? null : request.result, phase + " recorded"))
+                + "\",\"evidence\":\"" + json(defaultText(request == null ? null : request.evidence, "治理台安全模式记录"))
+                + "\",\"passed\":" + (request == null || request.passed)
+                + ",\"safeMode\":true}";
+    }
+
     private String rollbackDetail(Long changeId) {
         List<ReleaseNode> nodes = releaseNodeRepository.findByChangeIdOrderByNodeOrderAsc(changeId);
         nodes.sort(new Comparator<ReleaseNode>() {
@@ -1348,6 +1667,22 @@ public class ReleaseChangeServiceImpl implements com.juege.oshrelease.service.Re
             return fallback;
         }
         return defaultText(defaultText(request.actorDisplayName, request.reviewerDisplayName), fallback);
+    }
+
+    private String operationEnvironment(ReleaseChange change, ReleaseItemOperationRequest request) {
+        return defaultText(request == null ? null : request.environmentCode, change.getTargetEnvCode());
+    }
+
+    private String operationColor(ReleaseChange change, ReleaseItemOperationRequest request) {
+        return defaultText(request == null ? null : request.targetColor, change.getTargetColor());
+    }
+
+    private String itemActorUsername(ReleaseChangeItem item, ReleaseItemOperationRequest request) {
+        return defaultText(request == null ? null : request.actorUsername, item.getOwnerUsername());
+    }
+
+    private String itemActorDisplayName(ReleaseChangeItem item, ReleaseItemOperationRequest request) {
+        return defaultText(request == null ? null : request.actorDisplayName, item.getOwnerDisplayName());
     }
 
     private boolean isJuege(String username, String displayName) {

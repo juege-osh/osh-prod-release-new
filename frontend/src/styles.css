@@ -357,6 +357,17 @@ dd {
   background: var(--amber);
 }
 
+.danger-mini {
+  background: var(--red);
+}
+
+.item-actions {
+  min-width: 240px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .view-tabs {
   justify-content: flex-start;
   margin-bottom: 14px;
@@ -460,6 +471,11 @@ dd {
   margin-top: 4px;
   color: var(--muted);
   word-break: break-all;
+}
+
+.strong-muted {
+  color: var(--ink);
+  font-weight: 700;
 }
 
 .report-grid article,

@@ -7,6 +7,7 @@ import com.juege.oshrelease.dto.ReleaseChangeCreateRequest;
 import com.juege.oshrelease.dto.ReleaseChangeDetailDTO;
 import com.juege.oshrelease.dto.ReleaseChangeItemDTO;
 import com.juege.oshrelease.dto.ReleaseChangeOperationRequest;
+import com.juege.oshrelease.dto.ReleaseItemOperationRequest;
 import com.juege.oshrelease.dto.ReviewerTestEvidenceRequest;
 import com.juege.oshrelease.model.ComponentDefinition;
 import com.juege.oshrelease.model.DemoRecord;
@@ -116,9 +117,13 @@ class ReleaseChangeServiceImplWorkflowTest {
         ReleaseChangeDetailDTO afterEvidence = service.detail(created.id);
         assertEquals(22, afterEvidence.evidences.size());
 
+        completeItemOperations(service, created.id);
         service.functionTest(created.id);
         ReleaseChangeDetailDTO afterFunction = service.detail(created.id);
         assertTrue(afterFunction.operations.stream().anyMatch(operation -> "AUTO_FUNCTION_TEST".equals(operation.operationType)));
+        assertTrue(afterFunction.operations.stream().anyMatch(operation -> "ITEM_DRY_RUN".equals(operation.operationType)));
+        assertTrue(afterFunction.operations.stream().anyMatch(operation -> "ITEM_EXECUTE".equals(operation.operationType)));
+        assertTrue(afterFunction.operations.stream().anyMatch(operation -> "ITEM_VERIFY".equals(operation.operationType)));
         assertEquals("TESTING", afterFunction.status);
 
         service.dataTest(created.id);
@@ -203,6 +208,7 @@ class ReleaseChangeServiceImplWorkflowTest {
                     item.componentName + " 已补齐觉哥确认。"));
         }
 
+        completeItemOperations(service, created.id);
         service.functionTest(created.id);
         service.dataTest(created.id);
 
@@ -263,6 +269,29 @@ class ReleaseChangeServiceImplWorkflowTest {
         request.demoObserved = true;
         request.responsibilityAccepted = true;
         request.evidence = evidence;
+        return request;
+    }
+
+    private void completeItemOperations(ReleaseChangeServiceImpl service, Long changeId) {
+        ReleaseChangeDetailDTO detail = service.detail(changeId);
+        for (ReleaseChangeItemDTO item : detail.items) {
+            service.analyzeItem(changeId, item.id);
+            service.dryRunItem(changeId, item.id, itemOperation("dry-run ok"));
+            service.executeItem(changeId, item.id, itemOperation("green execute recorded"));
+            service.verifyItem(changeId, item.id, itemOperation("verify ok"));
+        }
+    }
+
+    private ReleaseItemOperationRequest itemOperation(String evidence) {
+        ReleaseItemOperationRequest request = new ReleaseItemOperationRequest();
+        request.actorUsername = "ops";
+        request.actorDisplayName = "运维同学";
+        request.environmentCode = "prod";
+        request.targetColor = "green";
+        request.result = evidence;
+        request.evidence = evidence;
+        request.passed = true;
+        request.safeMode = true;
         return request;
     }
 

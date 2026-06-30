@@ -176,6 +176,13 @@ def main():
             api("POST", f"/changes/{change_id}/reviewer-test", token=token, body=body)
 
     api("POST", f"/changes/{change_id}/validate-specs", token=token, body={})
+    blocked_function = api("POST", f"/changes/{change_id}/test/function", token=token, body={}, allow_failure=True)
+    if blocked_function.get("ok", True):
+        raise SmokeError("缺少单项 dry-run/执行/验证时，功能测试不应该通过。")
+    print("单项闸门已拦截:", blocked_function.get("message"))
+
+    detail = api("GET", f"/changes/{change_id}", token=token)
+    complete_item_operations(change_id, token, detail["items"])
     api("POST", f"/changes/{change_id}/test/function", token=token, body={})
     api("POST", f"/changes/{change_id}/test/data", token=token, body={})
 
@@ -216,6 +223,32 @@ def main():
 
     print("冒烟完成，最终状态:", detail["status"])
     print("课程/用户业务数据：脚本未连接业务库，只写治理库演练记录。")
+
+
+def complete_item_operations(change_id, token, items):
+    for item in items:
+        api("POST", f"/changes/{change_id}/items/{item['id']}/analyze", token=token, body={})
+        for action, result in (
+            ("dry-run", "API 冒烟 dry-run 通过"),
+            ("execute", "API 冒烟绿环境执行记录"),
+            ("verify", "API 冒烟验证通过"),
+        ):
+            api(
+                "POST",
+                f"/changes/{change_id}/items/{item['id']}/{action}",
+                token=token,
+                body={
+                    "actorUsername": "ops",
+                    "actorDisplayName": "运维同学",
+                    "environmentCode": TARGET_ENV,
+                    "targetColor": TARGET_COLOR,
+                    "result": result,
+                    "evidence": "%s %s，安全模式只写治理库。" % (item["title"], result),
+                    "passed": True,
+                    "safeMode": True,
+                },
+            )
+    print("已完成单项分析、dry-run、执行记录和验证")
 
 
 def release_payloads():

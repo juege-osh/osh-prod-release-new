@@ -8,6 +8,7 @@ import com.juege.oshrelease.dto.ReleaseChangeItemUpdateRequest;
 import com.juege.oshrelease.dto.ReleaseChangeListItemDTO;
 import com.juege.oshrelease.dto.ReleaseChangeOperationRequest;
 import com.juege.oshrelease.dto.ReleaseChangeQueryRequest;
+import com.juege.oshrelease.dto.ReleaseItemOperationRequest;
 import com.juege.oshrelease.dto.ReviewerTestEvidenceRequest;
 import com.juege.oshrelease.service.ReleaseChangeService;
 import java.util.List;
@@ -77,6 +78,39 @@ public class ReleaseChangeController {
                                                           @PathVariable Long itemId,
                                                           @RequestBody ReleaseChangeItemUpdateRequest request) {
         return ApiResponse.ok(releaseChangeService.updateItem(id, itemId, request));
+    }
+
+    @PostMapping("/{id}/items/{itemId}/analyze")
+    public ApiResponse<ReleaseChangeDetailDTO> analyzeItem(@PathVariable Long id, @PathVariable Long itemId) {
+        return ApiResponse.ok(releaseChangeService.analyzeItem(id, itemId));
+    }
+
+    @PostMapping("/{id}/items/{itemId}/dry-run")
+    public ApiResponse<ReleaseChangeDetailDTO> dryRunItem(@PathVariable Long id,
+                                                          @PathVariable Long itemId,
+                                                          @RequestBody ReleaseItemOperationRequest request) {
+        return ApiResponse.ok(releaseChangeService.dryRunItem(id, itemId, request));
+    }
+
+    @PostMapping("/{id}/items/{itemId}/execute")
+    public ApiResponse<ReleaseChangeDetailDTO> executeItem(@PathVariable Long id,
+                                                           @PathVariable Long itemId,
+                                                           @RequestBody ReleaseItemOperationRequest request) {
+        return ApiResponse.ok(releaseChangeService.executeItem(id, itemId, request));
+    }
+
+    @PostMapping("/{id}/items/{itemId}/verify")
+    public ApiResponse<ReleaseChangeDetailDTO> verifyItem(@PathVariable Long id,
+                                                          @PathVariable Long itemId,
+                                                          @RequestBody ReleaseItemOperationRequest request) {
+        return ApiResponse.ok(releaseChangeService.verifyItem(id, itemId, request));
+    }
+
+    @PostMapping("/{id}/items/{itemId}/rollback")
+    public ApiResponse<ReleaseChangeDetailDTO> rollbackItem(@PathVariable Long id,
+                                                            @PathVariable Long itemId,
+                                                            @RequestBody ReleaseItemOperationRequest request) {
+        return ApiResponse.ok(releaseChangeService.rollbackItem(id, itemId, request));
     }
 
     @PostMapping("/{id}/reviewer-test")

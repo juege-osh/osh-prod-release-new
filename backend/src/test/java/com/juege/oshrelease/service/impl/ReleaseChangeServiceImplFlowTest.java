@@ -5,8 +5,10 @@ import com.juege.oshrelease.common.ReleaseType;
 import com.juege.oshrelease.dto.ReleaseChangeCreateRequest;
 import com.juege.oshrelease.dto.ReleaseChangeDetailDTO;
 import com.juege.oshrelease.dto.ReleaseChangeItemCreateRequest;
+import com.juege.oshrelease.dto.ReleaseChangeItemDTO;
 import com.juege.oshrelease.dto.ReleaseChangeItemUpdateRequest;
 import com.juege.oshrelease.dto.ReleaseChangeOperationRequest;
+import com.juege.oshrelease.dto.ReleaseItemOperationRequest;
 import com.juege.oshrelease.dto.ReviewerTestEvidenceRequest;
 import com.juege.oshrelease.model.ComponentDefinition;
 import com.juege.oshrelease.model.DemoRecord;
@@ -152,8 +154,12 @@ class ReleaseChangeServiceImplFlowTest {
         ensureReviewerEvidence(service, created.id, afterSqlItem.items.get(2).id, "reviewer_b", "评审 B", "prod-green", "sql B");
 
         service.validateSpecs(created.id);
+        completeItemOperations(service, created.id);
         ReleaseChangeDetailDTO function = service.functionTest(created.id);
         assertTrue(function.reports.stream().anyMatch(item -> "FUNCTION".equals(item.reportType) && item.passed));
+        assertTrue(function.operations.stream().anyMatch(item -> "ITEM_DRY_RUN".equals(item.operationType)));
+        assertTrue(function.operations.stream().anyMatch(item -> "ITEM_EXECUTE".equals(item.operationType)));
+        assertTrue(function.operations.stream().anyMatch(item -> "ITEM_VERIFY".equals(item.operationType)));
 
         ReleaseChangeDetailDTO data = service.dataTest(created.id);
         assertTrue(data.reports.stream().anyMatch(item -> "DATA".equals(item.reportType) && item.passed));
@@ -241,6 +247,7 @@ class ReleaseChangeServiceImplFlowTest {
 
         ensureReviewerEvidence(service, created.id, created.items.get(0).id, "juege", "觉哥", "prod-green", "mysql juege");
         service.validateSpecs(created.id);
+        completeItemOperations(service, created.id);
         ReleaseChangeDetailDTO function = service.functionTest(created.id);
         assertTrue(function.reports.stream().anyMatch(item -> "FUNCTION".equals(item.reportType)));
     }
@@ -294,6 +301,7 @@ class ReleaseChangeServiceImplFlowTest {
         ensureReviewerEvidence(service, created.id, created.items.get(0).id, "reviewer_b", "评审 B", "prod-green", "mysql B");
 
         service.validateSpecs(created.id);
+        completeItemOperations(service, created.id);
         service.functionTest(created.id);
         service.dataTest(created.id);
 
@@ -371,6 +379,29 @@ class ReleaseChangeServiceImplFlowTest {
         request.evidence = evidenceText;
         ReleaseChangeDetailDTO detail = service.reviewerTest(changeId, request);
         assertFalse(detail.evidences.isEmpty());
+    }
+
+    private void completeItemOperations(ReleaseChangeServiceImpl service, Long changeId) {
+        ReleaseChangeDetailDTO detail = service.detail(changeId);
+        for (ReleaseChangeItemDTO item : detail.items) {
+            service.analyzeItem(changeId, item.id);
+            service.dryRunItem(changeId, item.id, itemOperation("dry-run ok"));
+            service.executeItem(changeId, item.id, itemOperation("green execute recorded"));
+            service.verifyItem(changeId, item.id, itemOperation("verify ok"));
+        }
+    }
+
+    private ReleaseItemOperationRequest itemOperation(String evidence) {
+        ReleaseItemOperationRequest request = new ReleaseItemOperationRequest();
+        request.actorUsername = "ops";
+        request.actorDisplayName = "运维同学";
+        request.environmentCode = "prod";
+        request.targetColor = "green";
+        request.result = evidence;
+        request.evidence = evidence;
+        request.passed = true;
+        request.safeMode = true;
+        return request;
     }
 
     private static class Fixture {
