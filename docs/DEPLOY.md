@@ -64,6 +64,7 @@ location /release-console-api/ {
 
 ```bash
 export VITE_API_BASE=/release-console-api
+export VITE_BASE_PATH=/release-console/
 ```
 
 再执行：

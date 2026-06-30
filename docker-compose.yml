@@ -31,18 +31,21 @@ services:
       postgres:
         condition: service_healthy
     ports:
-      - "${OSH_RELEASE_BACKEND_PORT:-18080}:8080"
+      - "${OSH_RELEASE_BACKEND_BIND:-127.0.0.1}:${OSH_RELEASE_BACKEND_PORT:-18080}:8080"
 
   frontend:
     build:
       context: .
       dockerfile: frontend/Dockerfile
+      args:
+        VITE_API_BASE: ${VITE_API_BASE:-/api}
+        VITE_BASE_PATH: ${VITE_BASE_PATH:-/}
     container_name: osh-release-frontend
     restart: unless-stopped
     depends_on:
       - backend
     ports:
-      - "${OSH_RELEASE_WEB_PORT:-18081}:80"
+      - "${OSH_RELEASE_WEB_BIND:-127.0.0.1}:${OSH_RELEASE_WEB_PORT:-18081}:80"
 
 volumes:
   osh_release_pg:
