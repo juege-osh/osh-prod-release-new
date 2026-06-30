@@ -118,9 +118,16 @@
                 <button @click="approveAs('reviewer_a', '评审 A')">评审 A 通过</button>
                 <button @click="approveAs('reviewer_b', '评审 B')">评审 B 通过</button>
                 <button class="primary" @click="approveAs('juege', '觉哥')">觉哥确认</button>
+                <button @click="validateSpecs">规范校验</button>
+                <button @click="recordAllReviewerTests">补齐评审测试</button>
+                <button @click="runEnvDiff">环境差异</button>
+                <button @click="runAnnounceCheck">announce</button>
                 <button @click="runFunctionTest">功能测试</button>
                 <button @click="runDataTest">数据对比</button>
                 <button class="primary" @click="switchGreen">切绿</button>
+                <button @click="manualVerify">生产人工验证</button>
+                <button @click="syncBlue">同步蓝</button>
+                <button @click="switchBlue">回蓝</button>
                 <button class="danger-button" @click="rollback">回滚</button>
               </div>
               <div class="view-tabs">
@@ -128,9 +135,40 @@
                   {{ mode.label }}
                 </button>
               </div>
-              <NodeTable v-if="viewMode === 'table'" :nodes="selectedChange.nodes" />
-              <NodeTree v-if="viewMode === 'tree'" :nodes="selectedChange.nodes" />
-              <NodeGraph v-if="viewMode === 'graph'" :nodes="selectedChange.nodes" />
+              <NodeTable v-if="viewMode === 'table'" :nodes="selectedChange.nodes" :items="selectedChange.items" @edit-item="openItemEditor" />
+              <NodeTree v-if="viewMode === 'tree'" :nodes="selectedChange.nodes" :items="selectedChange.items" />
+              <NodeGraph v-if="viewMode === 'graph'" :nodes="selectedChange.nodes" :items="selectedChange.items" />
+              <form v-if="editingItem" class="item-editor" @submit.prevent="saveItem">
+                <div class="section-head">
+                  <h4>更新子 change：{{ editingItem.componentName }}</h4>
+                  <button type="button" class="ghost" @click="editingItem = null">收起</button>
+                </div>
+                <label>
+                  负责人
+                  <input v-model="itemForm.ownerDisplayName" />
+                </label>
+                <label>
+                  上线内容
+                  <textarea v-model="itemForm.changeContent" rows="3" />
+                </label>
+                <label>
+                  增量计划
+                  <textarea v-model="itemForm.incrementalPlan" rows="3" />
+                </label>
+                <label>
+                  回滚计划
+                  <textarea v-model="itemForm.rollbackPlan" rows="3" />
+                </label>
+                <label>
+                  测试计划
+                  <textarea v-model="itemForm.testPlan" rows="3" />
+                </label>
+                <label>
+                  数据采集计划
+                  <textarea v-model="itemForm.dataProbePlan" rows="3" />
+                </label>
+                <button class="primary" type="submit">保存子 change</button>
+              </form>
               <section class="report-grid">
                 <article>
                   <h4>审批记录</h4>
@@ -139,9 +177,21 @@
                   </p>
                 </article>
                 <article>
+                  <h4>评审测试证据</h4>
+                  <p v-for="evidence in selectedChange.evidences" :key="evidence.id">
+                    {{ evidence.componentKey }} · {{ evidence.reviewerDisplayName }} · {{ evidence.environmentCode }} · {{ evidence.passed ? '通过' : '失败' }}
+                  </p>
+                </article>
+                <article>
                   <h4>测试报告</h4>
                   <p v-for="report in selectedChange.reports" :key="report.id">
                     {{ report.reportType }} · {{ report.summary }}
+                  </p>
+                </article>
+                <article>
+                  <h4>操作链</h4>
+                  <p v-for="operation in selectedChange.operations" :key="operation.id">
+                    {{ operation.operationType }} · {{ operation.operationStatus }} · {{ operation.safeMode ? '安全模式' : '真实执行' }}
                   </p>
                 </article>
               </section>
@@ -199,6 +249,8 @@ const changes = ref([])
 const selectedChange = ref(null)
 const viewMode = ref('table')
 const loginForm = ref({ username: 'juege', password: 'Juege@2026' })
+const editingItem = ref(null)
+const itemForm = ref({})
 
 const navItems = [
   { key: 'dashboard', label: '总览' },
@@ -263,7 +315,7 @@ async function loadChange(id) {
 
 async function createChange() {
   const componentKeys = components.value
-    .filter((item) => ['mysql', 'redis', 'nacos', 'kafka', 'java-backend', 'vue-frontend', 'nginx'].includes(item.componentKey))
+    .filter((item) => ['mysql', 'redis', 'nacos', 'kafka', 'elasticsearch', 'hbase', 'java-backend', 'vue-frontend', 'nginx', 'docker-compose', 'mongodb'].includes(item.componentKey))
     .map((item) => item.componentKey)
   const change = await post('/changes', {
     title: 'release/20260708 绿环境上线演练',
@@ -296,6 +348,50 @@ async function approveAs(username, displayName) {
   })
 }
 
+async function validateSpecs() {
+  await operate(`/changes/${selectedChange.value.id}/validate-specs`, '组件规范校验已生成')
+}
+
+async function recordAllReviewerTests() {
+  await run(async () => {
+    for (const item of selectedChange.value.items || []) {
+      await post(`/changes/${selectedChange.value.id}/reviewer-test`, {
+        itemId: item.id,
+        reviewerUsername: 'reviewer_a',
+        reviewerDisplayName: '评审 A',
+        testType: 'FUNCTION',
+        environmentCode: 'test',
+        passed: true,
+        demoObserved: true,
+        responsibilityAccepted: true,
+        evidence: `${item.componentName} 已在测试环境验证功能和回滚口径`
+      })
+      await post(`/changes/${selectedChange.value.id}/reviewer-test`, {
+        itemId: item.id,
+        reviewerUsername: 'reviewer_b',
+        reviewerDisplayName: '评审 B',
+        testType: 'FUNCTION',
+        environmentCode: 'prod-green',
+        passed: true,
+        demoObserved: true,
+        responsibilityAccepted: true,
+        evidence: `${item.componentName} 已在绿环境复核`
+      })
+    }
+    await loadChange(selectedChange.value.id)
+    await refreshAll()
+    notice.value = '两位评审的测试证据已补齐'
+  })
+}
+
+async function runEnvDiff() {
+  await operate(`/changes/${selectedChange.value.id}/test/env-diff`, '环境差异报告已生成')
+}
+
+async function runAnnounceCheck() {
+  await operate(`/changes/${selectedChange.value.id}/test/announce`, 'announce 检查已生成')
+}
+
 async function runFunctionTest() {
   await operate(`/changes/${selectedChange.value.id}/test/function`, '功能测试已生成')
 }
@@ -308,8 +404,41 @@ async function switchGreen() {
   await operate(`/changes/${selectedChange.value.id}/switch/green`, '已记录切绿')
 }
 
+async function switchBlue() {
+  await operate(`/changes/${selectedChange.value.id}/switch/blue`, '已记录回蓝')
+}
+
+async function manualVerify() {
+  await operate(`/changes/${selectedChange.value.id}/verify/manual`, '生产人工验证已记录', {
+    actorUsername: 'ops',
+    actorDisplayName: '运维同学',
+    comment: '绿系统页面、接口、组件功能已人工验证通过'
+  })
+}
+
+async function syncBlue() {
+  await operate(`/changes/${selectedChange.value.id}/sync/blue`, '已记录同步蓝系统', {
+    actorUsername: 'ops',
+    actorDisplayName: '运维同学',
+    comment: '绿系统验证通过后同步蓝系统'
+  })
+}
+
 async function rollback() {
   await operate(`/changes/${selectedChange.value.id}/rollback`, '已记录回滚')
+}
+
+function openItemEditor(item) {
+  editingItem.value = item
+  itemForm.value = { ...item }
+}
+
+async function saveItem() {
+  await operate(`/changes/${selectedChange.value.id}/items/${editingItem.value.id}`, '子 change 已保存', {
+    ...itemForm.value,
+    ownerUsername: itemForm.value.ownerUsername || 'ops'
+  })
+  editingItem.value = null
 }
 
 async function operate(path, message, body) {
@@ -337,40 +466,59 @@ onMounted(async () => {
 })
 
 const NodeTable = {
-  props: ['nodes'],
+  props: ['nodes', 'items'],
+  emits: ['edit-item'],
+  methods: {
+    findItem(componentKey) {
+      return (this.items || []).find((item) => item.componentKey === componentKey) || {}
+    }
+  },
   render() {
     return h('table', { class: 'node-table' }, [
-      h('thead', [h('tr', ['顺序', '组件', '动作', '状态', '回滚顺序'].map((text) => h('th', text)))]),
-      h('tbody', this.nodes.map((node) => h('tr', [
+      h('thead', [h('tr', ['顺序', '组件', '负责人', '规范', '双评审', '动作', '状态', '回滚顺序', '编辑'].map((text) => h('th', text)))]),
+      h('tbody', this.nodes.map((node) => {
+        const item = this.findItem(node.componentKey)
+        return h('tr', [
         h('td', node.nodeOrder),
         h('td', node.componentName),
+        h('td', item.ownerDisplayName || '-'),
+        h('td', item.specStatus || '-'),
+        h('td', item.reviewerAConfirmed && item.reviewerBConfirmed ? '已齐' : '缺证据'),
         h('td', node.actionType),
         h('td', node.status),
-        h('td', node.rollbackOrder)
-      ])))
+        h('td', node.rollbackOrder),
+        h('td', h('button', { class: 'mini-button', onClick: () => this.$emit('edit-item', item) }, '编辑'))
+      ])
+      }))
     ])
   }
 }
 
 const NodeTree = {
-  props: ['nodes'],
+  props: ['nodes', 'items'],
   render() {
-    return h('div', { class: 'node-tree' }, this.nodes.map((node) => h('div', { class: 'tree-line' }, [
+    return h('div', { class: 'node-tree' }, this.nodes.map((node) => {
+      const item = (this.items || []).find((entry) => entry.componentKey === node.componentKey) || {}
+      return h('div', { class: 'tree-line' }, [
       h('span', node.nodeOrder),
       h('strong', node.componentName),
-      h('small', `${node.configDir} -> ${node.dataDir}`)
-    ])))
+      h('small', `${item.title || node.actionType} | ${node.configDir} -> ${node.dataDir}`)
+    ])
+    }))
   }
 }
 
 const NodeGraph = {
-  props: ['nodes'],
+  props: ['nodes', 'items'],
   render() {
-    return h('div', { class: 'node-graph' }, this.nodes.map((node, index) => h('div', { class: 'graph-node' }, [
+    return h('div', { class: 'node-graph' }, this.nodes.map((node, index) => {
+      const item = (this.items || []).find((entry) => entry.componentKey === node.componentKey) || {}
+      return h('div', { class: 'graph-node' }, [
       h('span', `#${index + 1}`),
       h('strong', node.componentName),
-      h('small', node.status)
-    ])))
+      h('small', `${node.status} · ${item.specStatus || '待校验'}`)
+    ])
+    }))
   }
 }
 </script>

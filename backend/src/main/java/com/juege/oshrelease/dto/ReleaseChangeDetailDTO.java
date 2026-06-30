@@ -24,7 +24,9 @@ public class ReleaseChangeDetailDTO {
     public String currentStep;
     public String finalMessage;
     public List<ReleaseNodeDTO> nodes;
+    public List<ReleaseChangeItemDTO> items;
     public List<ReviewRecordDTO> reviews;
+    public List<ReviewerTestEvidenceDTO> evidences;
     public List<TestReportDTO> reports;
+    public List<ReleaseOperationRecordDTO> operations;
 }
-

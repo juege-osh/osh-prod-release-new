@@ -1,12 +1,18 @@
 package com.juege.oshrelease.service.impl;
 
 import com.juege.oshrelease.dto.ReleaseChangeDetailDTO;
+import com.juege.oshrelease.dto.ReleaseChangeItemDTO;
 import com.juege.oshrelease.dto.ReleaseChangeListItemDTO;
 import com.juege.oshrelease.dto.ReleaseNodeDTO;
+import com.juege.oshrelease.dto.ReleaseOperationRecordDTO;
+import com.juege.oshrelease.dto.ReviewerTestEvidenceDTO;
 import com.juege.oshrelease.dto.ReviewRecordDTO;
 import com.juege.oshrelease.dto.TestReportDTO;
 import com.juege.oshrelease.model.ReleaseChange;
+import com.juege.oshrelease.model.ReleaseChangeItem;
 import com.juege.oshrelease.model.ReleaseNode;
+import com.juege.oshrelease.model.ReleaseOperationRecord;
+import com.juege.oshrelease.model.ReviewerTestEvidence;
 import com.juege.oshrelease.model.ReviewRecord;
 import com.juege.oshrelease.model.TestReport;
 import java.time.format.DateTimeFormatter;
@@ -39,8 +45,13 @@ final class ReleaseChangeMapper {
         return dto;
     }
 
-    static ReleaseChangeDetailDTO toDetail(ReleaseChange change, List<ReleaseNodeDTO> nodes,
-                                           List<ReviewRecordDTO> reviews, List<TestReportDTO> reports) {
+    static ReleaseChangeDetailDTO toDetail(ReleaseChange change,
+                                           List<ReleaseNodeDTO> nodes,
+                                           List<ReleaseChangeItemDTO> items,
+                                           List<ReviewRecordDTO> reviews,
+                                           List<ReviewerTestEvidenceDTO> evidences,
+                                           List<TestReportDTO> reports,
+                                           List<ReleaseOperationRecordDTO> operations) {
         ReleaseChangeDetailDTO dto = new ReleaseChangeDetailDTO();
         dto.id = change.getId();
         dto.changeCode = change.getChangeCode();
@@ -63,8 +74,35 @@ final class ReleaseChangeMapper {
         dto.currentStep = change.getCurrentStep();
         dto.finalMessage = change.getFinalMessage();
         dto.nodes = nodes;
+        dto.items = items;
         dto.reviews = reviews;
+        dto.evidences = evidences;
         dto.reports = reports;
+        dto.operations = operations;
+        return dto;
+    }
+
+    static ReleaseChangeItemDTO toItemDTO(ReleaseChangeItem item) {
+        ReleaseChangeItemDTO dto = new ReleaseChangeItemDTO();
+        dto.id = item.getId();
+        dto.itemKey = item.getItemKey();
+        dto.itemOrder = item.getItemOrder();
+        dto.componentKey = item.getComponentKey();
+        dto.componentName = item.getComponentName();
+        dto.componentType = item.getComponentType();
+        dto.ownerUsername = item.getOwnerUsername();
+        dto.ownerDisplayName = item.getOwnerDisplayName();
+        dto.title = item.getTitle();
+        dto.changeContent = item.getChangeContent();
+        dto.incrementalPlan = item.getIncrementalPlan();
+        dto.rollbackPlan = item.getRollbackPlan();
+        dto.testPlan = item.getTestPlan();
+        dto.dataProbePlan = item.getDataProbePlan();
+        dto.specStatus = item.getSpecStatus();
+        dto.lifecycleStatus = item.getLifecycleStatus();
+        dto.reviewerAConfirmed = item.isReviewerAConfirmed();
+        dto.reviewerBConfirmed = item.isReviewerBConfirmed();
+        dto.juegeConfirmed = item.isJuegeConfirmed();
         return dto;
     }
 
@@ -101,6 +139,23 @@ final class ReleaseChangeMapper {
         return dto;
     }
 
+    static ReviewerTestEvidenceDTO toEvidenceDTO(ReviewerTestEvidence evidence) {
+        ReviewerTestEvidenceDTO dto = new ReviewerTestEvidenceDTO();
+        dto.id = evidence.getId();
+        dto.itemId = evidence.getItemId();
+        dto.componentKey = evidence.getComponentKey();
+        dto.reviewerUsername = evidence.getReviewerUsername();
+        dto.reviewerDisplayName = evidence.getReviewerDisplayName();
+        dto.testType = evidence.getTestType();
+        dto.environmentCode = evidence.getEnvironmentCode();
+        dto.passed = evidence.isPassed();
+        dto.demoObserved = evidence.isDemoObserved();
+        dto.responsibilityAccepted = evidence.isResponsibilityAccepted();
+        dto.evidence = evidence.getEvidence();
+        dto.createdAt = evidence.getCreatedAt() == null ? "" : evidence.getCreatedAt().format(FORMATTER);
+        return dto;
+    }
+
     static TestReportDTO toReportDTO(TestReport report) {
         TestReportDTO dto = new TestReportDTO();
         dto.id = report.getId();
@@ -111,6 +166,22 @@ final class ReleaseChangeMapper {
         dto.aiVerdict = report.getAiVerdict();
         dto.passed = report.isPassed();
         dto.createdAt = report.getCreatedAt() == null ? "" : report.getCreatedAt().format(FORMATTER);
+        return dto;
+    }
+
+    static ReleaseOperationRecordDTO toOperationDTO(ReleaseOperationRecord operation) {
+        ReleaseOperationRecordDTO dto = new ReleaseOperationRecordDTO();
+        dto.id = operation.getId();
+        dto.operationType = operation.getOperationType();
+        dto.operationStatus = operation.getOperationStatus();
+        dto.environmentCode = operation.getEnvironmentCode();
+        dto.targetColor = operation.getTargetColor();
+        dto.actorUsername = operation.getActorUsername();
+        dto.actorDisplayName = operation.getActorDisplayName();
+        dto.safeMode = operation.isSafeMode();
+        dto.summary = operation.getSummary();
+        dto.detailJson = operation.getDetailJson();
+        dto.createdAt = operation.getCreatedAt() == null ? "" : operation.getCreatedAt().format(FORMATTER);
         return dto;
     }
 }

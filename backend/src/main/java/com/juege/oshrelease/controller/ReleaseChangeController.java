@@ -3,9 +3,11 @@ package com.juege.oshrelease.controller;
 import com.juege.oshrelease.common.ApiResponse;
 import com.juege.oshrelease.dto.ReleaseChangeCreateRequest;
 import com.juege.oshrelease.dto.ReleaseChangeDetailDTO;
+import com.juege.oshrelease.dto.ReleaseChangeItemUpdateRequest;
 import com.juege.oshrelease.dto.ReleaseChangeListItemDTO;
 import com.juege.oshrelease.dto.ReleaseChangeOperationRequest;
 import com.juege.oshrelease.dto.ReleaseChangeQueryRequest;
+import com.juege.oshrelease.dto.ReviewerTestEvidenceRequest;
 import com.juege.oshrelease.service.ReleaseChangeService;
 import java.util.List;
 import java.util.Map;
@@ -63,6 +65,23 @@ public class ReleaseChangeController {
         return ApiResponse.ok(releaseChangeService.demo(id, request));
     }
 
+    @PostMapping("/{id}/items/{itemId}")
+    public ApiResponse<ReleaseChangeDetailDTO> updateItem(@PathVariable Long id,
+                                                          @PathVariable Long itemId,
+                                                          @RequestBody ReleaseChangeItemUpdateRequest request) {
+        return ApiResponse.ok(releaseChangeService.updateItem(id, itemId, request));
+    }
+
+    @PostMapping("/{id}/reviewer-test")
+    public ApiResponse<ReleaseChangeDetailDTO> reviewerTest(@PathVariable Long id, @RequestBody ReviewerTestEvidenceRequest request) {
+        return ApiResponse.ok(releaseChangeService.reviewerTest(id, request));
+    }
+
+    @PostMapping("/{id}/validate-specs")
+    public ApiResponse<ReleaseChangeDetailDTO> validateSpecs(@PathVariable Long id) {
+        return ApiResponse.ok(releaseChangeService.validateSpecs(id));
+    }
+
     @PostMapping("/{id}/test/function")
     public ApiResponse<ReleaseChangeDetailDTO> functionTest(@PathVariable Long id) {
         return ApiResponse.ok(releaseChangeService.functionTest(id));
@@ -73,6 +92,16 @@ public class ReleaseChangeController {
         return ApiResponse.ok(releaseChangeService.dataTest(id));
     }
 
+    @PostMapping("/{id}/test/env-diff")
+    public ApiResponse<ReleaseChangeDetailDTO> envDiff(@PathVariable Long id) {
+        return ApiResponse.ok(releaseChangeService.envDiff(id));
+    }
+
+    @PostMapping("/{id}/test/announce")
+    public ApiResponse<ReleaseChangeDetailDTO> announceCheck(@PathVariable Long id) {
+        return ApiResponse.ok(releaseChangeService.announceCheck(id));
+    }
+
     @PostMapping("/{id}/switch/green")
     public ApiResponse<ReleaseChangeDetailDTO> switchGreen(@PathVariable Long id) {
         return ApiResponse.ok(releaseChangeService.switchGreen(id));
@@ -81,6 +110,16 @@ public class ReleaseChangeController {
     @PostMapping("/{id}/switch/blue")
     public ApiResponse<ReleaseChangeDetailDTO> switchBlue(@PathVariable Long id) {
         return ApiResponse.ok(releaseChangeService.switchBlue(id));
+    }
+
+    @PostMapping("/{id}/verify/manual")
+    public ApiResponse<ReleaseChangeDetailDTO> manualVerify(@PathVariable Long id, @RequestBody ReleaseChangeOperationRequest request) {
+        return ApiResponse.ok(releaseChangeService.manualVerify(id, request));
+    }
+
+    @PostMapping("/{id}/sync/blue")
+    public ApiResponse<ReleaseChangeDetailDTO> syncGreenToBlue(@PathVariable Long id, @RequestBody ReleaseChangeOperationRequest request) {
+        return ApiResponse.ok(releaseChangeService.syncGreenToBlue(id, request));
     }
 
     @PostMapping("/{id}/rollback")

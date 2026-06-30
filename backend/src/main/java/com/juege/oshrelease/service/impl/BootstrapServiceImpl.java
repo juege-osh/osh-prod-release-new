@@ -6,14 +6,22 @@ import com.juege.oshrelease.model.AppUser;
 import com.juege.oshrelease.model.ComponentDefinition;
 import com.juege.oshrelease.model.Environment;
 import com.juege.oshrelease.model.ReleaseChange;
+import com.juege.oshrelease.model.ReleaseChangeItem;
 import com.juege.oshrelease.model.ReleaseNode;
+import com.juege.oshrelease.model.ReleaseOperationRecord;
+import com.juege.oshrelease.model.ReviewerTestEvidence;
+import com.juege.oshrelease.model.ReviewRecord;
 import com.juege.oshrelease.model.SourceProject;
 import com.juege.oshrelease.model.TestReport;
 import com.juege.oshrelease.repo.AppUserRepository;
 import com.juege.oshrelease.repo.ComponentRepository;
 import com.juege.oshrelease.repo.EnvironmentRepository;
+import com.juege.oshrelease.repo.ReleaseChangeItemRepository;
 import com.juege.oshrelease.repo.ReleaseChangeRepository;
 import com.juege.oshrelease.repo.ReleaseNodeRepository;
+import com.juege.oshrelease.repo.ReleaseOperationRecordRepository;
+import com.juege.oshrelease.repo.ReviewerTestEvidenceRepository;
+import com.juege.oshrelease.repo.ReviewRecordRepository;
 import com.juege.oshrelease.repo.SourceProjectRepository;
 import com.juege.oshrelease.repo.TestReportRepository;
 import com.juege.oshrelease.service.BootstrapService;
@@ -34,6 +42,10 @@ public class BootstrapServiceImpl implements BootstrapService {
     private final SourceProjectRepository sourceProjectRepository;
     private final ReleaseChangeRepository releaseChangeRepository;
     private final ReleaseNodeRepository releaseNodeRepository;
+    private final ReleaseChangeItemRepository releaseChangeItemRepository;
+    private final ReviewRecordRepository reviewRecordRepository;
+    private final ReviewerTestEvidenceRepository reviewerTestEvidenceRepository;
+    private final ReleaseOperationRecordRepository releaseOperationRecordRepository;
     private final TestReportRepository testReportRepository;
     private final PasswordEncoder passwordEncoder;
 
@@ -43,6 +55,10 @@ public class BootstrapServiceImpl implements BootstrapService {
                                 SourceProjectRepository sourceProjectRepository,
                                 ReleaseChangeRepository releaseChangeRepository,
                                 ReleaseNodeRepository releaseNodeRepository,
+                                ReleaseChangeItemRepository releaseChangeItemRepository,
+                                ReviewRecordRepository reviewRecordRepository,
+                                ReviewerTestEvidenceRepository reviewerTestEvidenceRepository,
+                                ReleaseOperationRecordRepository releaseOperationRecordRepository,
                                 TestReportRepository testReportRepository,
                                 PasswordEncoder passwordEncoder) {
         this.appUserRepository = appUserRepository;
@@ -51,6 +67,10 @@ public class BootstrapServiceImpl implements BootstrapService {
         this.sourceProjectRepository = sourceProjectRepository;
         this.releaseChangeRepository = releaseChangeRepository;
         this.releaseNodeRepository = releaseNodeRepository;
+        this.releaseChangeItemRepository = releaseChangeItemRepository;
+        this.reviewRecordRepository = reviewRecordRepository;
+        this.reviewerTestEvidenceRepository = reviewerTestEvidenceRepository;
+        this.releaseOperationRecordRepository = releaseOperationRecordRepository;
         this.testReportRepository = testReportRepository;
         this.passwordEncoder = passwordEncoder;
     }
@@ -167,7 +187,9 @@ public class BootstrapServiceImpl implements BootstrapService {
     }
 
     private void seedDemoChange() {
-        if (releaseChangeRepository.findByChangeCode("CHG-20260708-0001").isPresent()) {
+        Optional<ReleaseChange> existing = releaseChangeRepository.findByChangeCode("CHG-20260708-0001");
+        if (existing.isPresent()) {
+            ensureDemoDepth(existing.get());
             return;
         }
         ReleaseChange change = new ReleaseChange();
@@ -186,17 +208,51 @@ public class BootstrapServiceImpl implements BootstrapService {
         change.setDemoRequired(false);
         change.setDemoConfirmed(false);
         change.setRiskLevel("HIGH");
-        change.setSummary("覆盖 MySQL、Redis、Kafka、Nacos、后端和前端，先在绿环境完成自动化测试。");
+        change.setSummary("覆盖 MySQL、Redis、ES、Kafka、HBase、Nacos、后端、前端、Nginx、Compose 和 MongoDB 扩展组件。");
         change.setContentJson("{\"scope\":\"release/20260708\",\"prodWritePolicy\":\"manual-confirm-required\",\"courseAndUserModules\":\"protected\"}");
         change.setCurrentStep("自动化测试中");
         change.setFinalMessage("演示数据，只写治理库，不执行生产命令。");
         releaseChangeRepository.save(change);
 
+        ensureDemoDepth(change);
+    }
+
+    private void ensureDemoDepth(ReleaseChange change) {
+        List<ComponentDefinition> components = demoComponents();
+        ensureDemoNodes(change, components);
+        ensureDemoItems(change, components);
+        ensureDemoReviews(change);
+        ensureDemoEvidences(change);
+        ensureDemoReports(change);
+        ensureDemoOperations(change);
+    }
+
+    private List<ComponentDefinition> demoComponents() {
         List<ComponentDefinition> components = componentRepository.findAll();
         components.sort(Comparator.comparingInt(ComponentDefinition::getInstallOrder));
-        int index = 1;
+        List<ComponentDefinition> selected = new java.util.ArrayList<ComponentDefinition>();
+        List<String> keys = Arrays.asList("mysql", "redis", "nacos", "kafka", "elasticsearch", "hbase",
+                "java-backend", "vue-frontend", "nginx", "docker-compose", "mongodb");
         for (ComponentDefinition component : components) {
-            if (!Arrays.asList("mysql", "redis", "nacos", "kafka", "java-backend", "vue-frontend", "nginx").contains(component.getComponentKey())) {
+            if (keys.contains(component.getComponentKey())) {
+                selected.add(component);
+            }
+        }
+        return selected;
+    }
+
+    private void ensureDemoNodes(ReleaseChange change, List<ComponentDefinition> components) {
+        List<ReleaseNode> existingNodes = releaseNodeRepository.findByChangeIdOrderByNodeOrderAsc(change.getId());
+        List<String> existingKeys = new java.util.ArrayList<String>();
+        int order = 1;
+        for (ReleaseNode node : existingNodes) {
+            existingKeys.add(node.getComponentKey());
+            if (node.getNodeOrder() >= order) {
+                order = node.getNodeOrder() + 1;
+            }
+        }
+        for (ComponentDefinition component : components) {
+            if (existingKeys.contains(component.getComponentKey())) {
                 continue;
             }
             ReleaseNode node = new ReleaseNode();
@@ -205,10 +261,10 @@ public class BootstrapServiceImpl implements BootstrapService {
             node.setComponentKey(component.getComponentKey());
             node.setComponentName(component.getComponentName());
             node.setNodeType(component.getComponentType());
-            node.setNodeOrder(index++);
+            node.setNodeOrder(order++);
             node.setRollbackOrder(component.getRollbackOrder());
             node.setStatus("PASSED");
-            node.setActionType("GREEN_FIRST");
+            node.setActionType("GREEN_FIRST_INCREMENTAL");
             node.setHostName("prod-green");
             node.setCommandHint("dry-run only; execute requires juege approval");
             node.setConfigDir(component.getConfigDir());
@@ -216,15 +272,160 @@ public class BootstrapServiceImpl implements BootstrapService {
             node.setDetailJson("{\"incremental\":true,\"rollback\":true,\"prodWrite\":\"blocked-by-default\"}");
             releaseNodeRepository.save(node);
         }
+    }
 
+    private void ensureDemoItems(ReleaseChange change, List<ComponentDefinition> components) {
+        List<ReleaseChangeItem> existingItems = releaseChangeItemRepository.findByChangeIdOrderByItemOrderAsc(change.getId());
+        List<String> existingKeys = new java.util.ArrayList<String>();
+        int order = 1;
+        for (ReleaseChangeItem item : existingItems) {
+            existingKeys.add(item.getComponentKey());
+            if (item.getItemOrder() >= order) {
+                order = item.getItemOrder() + 1;
+            }
+        }
+        for (ComponentDefinition component : components) {
+            if (existingKeys.contains(component.getComponentKey())) {
+                continue;
+            }
+            ReleaseChangeItem item = new ReleaseChangeItem();
+            item.setChangeId(change.getId());
+            item.setItemKey(change.getChangeCode() + "-" + component.getComponentKey());
+            item.setItemOrder(order++);
+            item.setComponentKey(component.getComponentKey());
+            item.setComponentName(component.getComponentName());
+            item.setComponentType(component.getComponentType());
+            item.setOwnerUsername("ops");
+            item.setOwnerDisplayName("运维同学");
+            item.setTitle(component.getComponentName() + " 增量上线演练");
+            item.setChangeContent(component.getComponentName() + " 在绿环境做增量上线演练，不改课程和用户业务数据。");
+            item.setIncrementalPlan("先 dry-run，再按节点发布绿环境；检查配置目录 " + component.getConfigDir() + " 和部署目录 " + component.getDeployPath() + "。");
+            item.setRollbackPlan("按 rollback_order 逆序恢复上一版配置和治理演练数据。");
+            item.setTestPlan("两位评审分别验证健康检查、接口/组件连通、回滚口径和异常处理。");
+            item.setDataProbePlan("只采集数量摘要；课程模块和用户模块 added/removed/changed 必须为 0。");
+            item.setSpecStatus("PASSED");
+            item.setLifecycleStatus("AUTO_TEST_READY");
+            item.setReviewerAConfirmed(true);
+            item.setReviewerBConfirmed(true);
+            item.setJuegeConfirmed(true);
+            releaseChangeItemRepository.save(item);
+        }
+    }
+
+    private void ensureDemoReviews(ReleaseChange change) {
+        if (!reviewRecordRepository.findByChangeIdOrderByCreatedAtAsc(change.getId()).isEmpty()) {
+            return;
+        }
+        review(change, "reviewer_a", "评审 A", "TEAM_REVIEW", "已检查组件上线内容和回滚口径。");
+        review(change, "reviewer_b", "评审 B", "TEAM_REVIEW", "已复核功能测试和数据量对比范围。");
+        review(change, "juege", "觉哥", "FINAL_APPROVAL", "最终确认通过。");
+    }
+
+    private void review(ReleaseChange change, String username, String displayName, String type, String comment) {
+        ReviewRecord review = new ReviewRecord();
+        review.setChangeId(change.getId());
+        review.setReviewerUsername(username);
+        review.setReviewerDisplayName(displayName);
+        review.setReviewType(type);
+        review.setPassed(true);
+        review.setDemoRequired(false);
+        review.setDemoConfirmed(true);
+        review.setComment(comment);
+        reviewRecordRepository.save(review);
+    }
+
+    private void ensureDemoEvidences(ReleaseChange change) {
+        if (!reviewerTestEvidenceRepository.findByChangeIdOrderByCreatedAtAsc(change.getId()).isEmpty()) {
+            return;
+        }
+        for (ReleaseChangeItem item : releaseChangeItemRepository.findByChangeIdOrderByItemOrderAsc(change.getId())) {
+            evidence(change, item, "reviewer_a", "评审 A", "test", "已在测试环境验证 " + item.getComponentName() + " 的功能和回滚口径。");
+            evidence(change, item, "reviewer_b", "评审 B", "prod-green", "已在生产绿环境复核 " + item.getComponentName() + " 的功能和数据影响。");
+        }
+    }
+
+    private void evidence(ReleaseChange change, ReleaseChangeItem item, String username, String displayName, String envCode, String content) {
+        ReviewerTestEvidence evidence = new ReviewerTestEvidence();
+        evidence.setChangeId(change.getId());
+        evidence.setItemId(item.getId());
+        evidence.setComponentKey(item.getComponentKey());
+        evidence.setReviewerUsername(username);
+        evidence.setReviewerDisplayName(displayName);
+        evidence.setTestType("FUNCTION");
+        evidence.setEnvironmentCode(envCode);
+        evidence.setPassed(true);
+        evidence.setDemoObserved(true);
+        evidence.setResponsibilityAccepted(true);
+        evidence.setEvidence(content);
+        reviewerTestEvidenceRepository.save(evidence);
+    }
+
+    private void ensureDemoReports(ReleaseChange change) {
+        List<TestReport> reports = testReportRepository.findByChangeIdOrderByCreatedAtAsc(change.getId());
+        List<String> types = new java.util.ArrayList<String>();
+        for (TestReport report : reports) {
+            types.add(report.getReportType());
+        }
+        if (!types.contains("SPEC")) {
+            report(change, "SPEC", "组件规范校验样例", "全组件配置目录、数据目录、部署目录、增量计划和回滚计划已齐。",
+                    "{\"components\":\"mysql,redis,nacos,kafka,elasticsearch,hbase,backend,frontend,nginx,compose,mongodb\"}",
+                    "规范齐全。");
+        }
+        if (!types.contains("FUNCTION")) {
+            report(change, "FUNCTION", "绿环境功能测试样例", "接口、缓存、消息、搜索、配置中心、存储和前端入口检查均通过。",
+                    "{\"mysql\":\"ok\",\"redis\":\"ok\",\"kafka\":\"ok\",\"nacos\":\"ok\",\"es\":\"ok\",\"hbase\":\"ok\",\"api\":\"ok\"}",
+                    "与上线范围一致，未发现课程和用户模块数据写入。");
+        }
+        if (!types.contains("DATA")) {
+            report(change, "DATA", "数据量对比样例", "课程模块和用户模块新增、删除、修改均为 0，只新增治理演练记录。",
+                    "{\"course\":{\"changed\":0},\"user\":{\"changed\":0},\"release_governance\":{\"added\":12}}",
+                    "数据差异符合上线内容。");
+        }
+        if (!types.contains("ENV_DIFF")) {
+            report(change, "ENV_DIFF", "生产测试环境差异样例", "测试环境单套，生产环境蓝绿，差异可解释。",
+                    "{\"test\":\"single\",\"prod\":\"blue-green\"}", "差异不阻塞上线治理流程。");
+        }
+        if (!types.contains("ANNOUNCE")) {
+            report(change, "ANNOUNCE", "announce 检查样例", "测试环境 announce 已纳入检查。",
+                    "{\"testEnv\":\"juegeresource.top\",\"announceFileExists\":true}", "announce 检查通过。");
+        }
+    }
+
+    private void report(ReleaseChange change, String type, String title, String summary, String detail, String verdict) {
         TestReport report = new TestReport();
         report.setChangeId(change.getId());
-        report.setReportType("FUNCTION");
-        report.setTitle("绿环境功能测试样例");
-        report.setSummary("接口、缓存、消息、配置中心检查均为模拟通过，正式上线前需重新执行。");
-        report.setDetailJson("{\"mysql\":\"ok\",\"redis\":\"ok\",\"kafka\":\"ok\",\"nacos\":\"ok\",\"api\":\"ok\"}");
-        report.setAiVerdict("与上线范围一致，未发现课程和用户模块数据写入。");
+        report.setReportType(type);
+        report.setTitle(title);
+        report.setSummary(summary);
+        report.setDetailJson(detail);
+        report.setAiVerdict(verdict);
         report.setPassed(true);
         testReportRepository.save(report);
+    }
+
+    private void ensureDemoOperations(ReleaseChange change) {
+        if (!releaseOperationRecordRepository.findByChangeIdOrderByCreatedAtAsc(change.getId()).isEmpty()) {
+            return;
+        }
+        operation(change, "CREATE_CHANGE", "RECORDED", "已生成完整演练单。");
+        operation(change, "AUTO_FUNCTION_TEST", "PASSED", "绿环境功能测试 dry-run 通过。");
+        operation(change, "AUTO_DATA_DIFF", "PASSED", "数据量对比通过。");
+        operation(change, "SWITCH_TO_GREEN", "RECORDED", "切绿动作已记录，安全模式未改生产网关。");
+        operation(change, "NODE_ROLLBACK", "RECORDED", "回滚链路已记录，安全模式未改业务数据。");
+    }
+
+    private void operation(ReleaseChange change, String type, String status, String summary) {
+        ReleaseOperationRecord operation = new ReleaseOperationRecord();
+        operation.setChangeId(change.getId());
+        operation.setOperationType(type);
+        operation.setOperationStatus(status);
+        operation.setEnvironmentCode(change.getTargetEnvCode());
+        operation.setTargetColor(change.getTargetColor());
+        operation.setActorUsername("system");
+        operation.setActorDisplayName("治理台");
+        operation.setSafeMode(true);
+        operation.setSummary(summary);
+        operation.setDetailJson("{\"safeMode\":true,\"prodBusinessDataChanged\":false}");
+        releaseOperationRecordRepository.save(operation);
     }
 }

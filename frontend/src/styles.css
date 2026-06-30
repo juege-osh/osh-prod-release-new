@@ -27,7 +27,8 @@ body {
 }
 
 button,
-input {
+input,
+textarea {
   font: inherit;
 }
 
@@ -99,13 +100,19 @@ label {
   color: var(--muted);
 }
 
-input {
+input,
+textarea {
   width: 100%;
   padding: 14px 16px;
   border: 1px solid var(--line);
   border-radius: 16px;
   color: var(--ink);
   background: #fffaf0;
+}
+
+textarea {
+  resize: vertical;
+  line-height: 1.65;
 }
 
 .primary,
@@ -311,6 +318,13 @@ dd {
   background: var(--red) !important;
 }
 
+.mini-button {
+  padding: 8px 12px;
+  border-radius: 999px;
+  color: #fffaf0;
+  background: var(--amber);
+}
+
 .view-tabs {
   justify-content: flex-start;
   margin-bottom: 14px;
@@ -334,6 +348,7 @@ dd {
   padding: 13px;
   border-bottom: 1px solid var(--line);
   text-align: left;
+  vertical-align: top;
 }
 
 .node-table th {
@@ -379,6 +394,16 @@ dd {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
   margin-top: 18px;
+}
+
+.item-editor {
+  margin: 18px 0;
+  padding: 18px;
+  display: grid;
+  gap: 14px;
+  border: 1px dashed rgba(33, 122, 84, 0.55);
+  border-radius: 22px;
+  background: rgba(255, 252, 242, 0.58);
 }
 
 .report-grid article,
@@ -444,6 +469,12 @@ pre {
   .component-grid,
   .report-grid {
     grid-template-columns: 1fr;
+  }
+
+  .node-table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
   }
 
   .environment-card {
