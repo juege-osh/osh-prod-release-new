@@ -308,13 +308,39 @@ dd {
   margin: 18px 0;
 }
 
+.component-workbench {
+  margin: 18px 0;
+  padding: 18px;
+  border: 1px solid rgba(38, 95, 115, 0.22);
+  border-radius: 24px;
+  background: rgba(255, 252, 242, 0.54);
+}
+
+.compact-head {
+  margin-bottom: 14px;
+}
+
+.compact-head h4,
+.compact-head p {
+  margin: 0;
+}
+
+.compact-head p {
+  color: var(--muted);
+}
+
+.action-catalog,
 .payload-guide {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
+}
+
+.payload-guide {
   margin: 18px 0;
 }
 
+.action-catalog article,
 .payload-guide article {
   padding: 16px;
   display: grid;
@@ -324,12 +350,24 @@ dd {
   background: linear-gradient(135deg, rgba(255, 252, 242, 0.88), rgba(225, 244, 231, 0.58));
 }
 
+.action-catalog span {
+  width: fit-content;
+  padding: 5px 9px;
+  border-radius: 999px;
+  color: #fffaf0;
+  background: var(--blue);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.action-catalog p,
 .payload-guide p {
   margin: 0;
   color: var(--muted);
   line-height: 1.6;
 }
 
+.action-catalog button,
 .payload-guide button {
   width: fit-content;
   padding: 9px 13px;
@@ -515,14 +553,71 @@ dd {
 }
 
 .component-grid article {
-  min-height: 220px;
+  min-height: 300px;
   display: grid;
   gap: 8px;
+  align-content: start;
 }
 
 .component-grid small {
   color: var(--muted);
   word-break: break-all;
+}
+
+.inventory-note {
+  margin: 16px 0;
+  padding: 16px 18px;
+  border: 1px solid rgba(38, 95, 115, 0.24);
+  border-radius: 20px;
+  background: rgba(225, 244, 231, 0.48);
+}
+
+.inventory-note p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.component-card-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.observed-pill {
+  width: fit-content;
+  padding: 5px 9px;
+  border-radius: 999px;
+  color: #fffaf0;
+  background: var(--blue);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.observed-pill.supported_not_found {
+  background: var(--amber);
+}
+
+.observed-pill.test_only_found {
+  background: #7d6740;
+}
+
+.observed-pill.behind_nginx {
+  background: var(--green);
+}
+
+.action-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.action-tags button {
+  padding: 7px 10px;
+  border-radius: 999px;
+  color: var(--ink);
+  background: rgba(16, 32, 27, 0.08);
 }
 
 pre {
@@ -563,6 +658,7 @@ pre {
   .grid,
   .component-grid,
   .report-grid,
+  .action-catalog,
   .payload-guide {
     grid-template-columns: 1fr;
   }

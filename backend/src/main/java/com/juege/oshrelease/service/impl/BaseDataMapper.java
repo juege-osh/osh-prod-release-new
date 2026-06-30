@@ -45,6 +45,9 @@ final class BaseDataMapper {
         dto.core = entity.isCore();
         dto.installOrder = entity.getInstallOrder();
         dto.rollbackOrder = entity.getRollbackOrder();
+        dto.actionTypes = entity.getActionTypes();
+        dto.observedStatus = entity.getObservedStatus();
+        dto.runtimeInventory = entity.getRuntimeInventory();
         dto.notes = entity.getNotes();
         return dto;
     }

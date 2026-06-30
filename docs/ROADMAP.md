@@ -2,7 +2,7 @@
 
 ## 目标
 
-这套平台要能承接真实上线，不只是登记流程。觉哥后面要上线 SQL、配置、代码、组件，都要能在平台里拆开、评审、dry-run、执行留痕、验证和回滚。
+这套平台要能承接真实上线，不只是登记流程。觉哥后面要上线 SQL、ES 索引、HBase DDL、Kafka topic、Nacos 配置、XXLJob 任务、代码、组件，都要能在平台里拆开、评审、dry-run、执行留痕、验证和回滚。
 
 生产默认只读。没有觉哥明确确认，平台不直接改生产业务库、网关或真实流量。
 
@@ -10,6 +10,14 @@
 
 1. 上线项分析
    - SQL：识别 DDL/DML、无 WHERE、drop/truncate/delete、课程/用户表风险。
+   - ES：识别 index、mapping、settings、alias、reindex、回切风险。
+   - HBase：识别 namespace、table、列族、预分区、disable/drop 回滚。
+   - Kafka：识别 topic、分区、副本、retention、消费组 lag。
+   - Zookeeper：识别 `zoo.cfg`、quorum、session、Kafka 依赖。
+   - XXLJob：识别 jobHandler、cron、路由策略、阻塞策略、停用回滚。
+   - Flink：识别 jar、并发、checkpoint/savepoint、状态兼容。
+   - Qdrant：识别 collection、向量维度、alias 和回滚 collection。
+   - Filebeat/OTel/Secret：识别配置 diff、采集路径、采样率、脱敏密钥配置。
    - 配置：识别配置路径、配置 diff、刷新方式、回滚配置。
    - 代码：记录分支、commit 范围、改动大纲、疑似 bug、构建产物。
 
@@ -25,7 +33,10 @@
    - 没有回滚内容，不能进入上线。
 
 4. 前端工作台
-   - Change 详情页要直接看到 SQL/配置/代码上线项。
+   - Change 详情页要直接看到组件动作入口。
+   - 支持 MySQL SQL、ES 索引/配置、HBase DDL/配置、Kafka topic/配置、Nacos 配置、XXLJob 任务、Redis 变更、代码发布、Compose 组件。
+   - 组件目录要展示测试服、生产蓝、生产绿只读盘点结果。
+   - HBase/MongoDB 这类未发现运行实例的组件，要明确显示“支持治理，实例待确认”。
    - 每行能点分析、dry-run、记录执行、验证、回滚。
    - 表格里显示当前状态、载荷路径、风险摘要。
 

@@ -15,6 +15,8 @@ public class ComponentDTO {
     public boolean core;
     public int installOrder;
     public int rollbackOrder;
+    public String actionTypes;
+    public String observedStatus;
+    public String runtimeInventory;
     public String notes;
 }
-

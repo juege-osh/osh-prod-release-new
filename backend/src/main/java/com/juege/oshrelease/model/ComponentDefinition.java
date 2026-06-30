@@ -47,6 +47,15 @@ public class ComponentDefinition extends BaseEntity {
     @Column(name = "rollback_order", nullable = false)
     private int rollbackOrder;
 
+    @Column(name = "action_types", nullable = false, length = 512)
+    private String actionTypes;
+
+    @Column(name = "observed_status", nullable = false, length = 64)
+    private String observedStatus;
+
+    @Column(name = "runtime_inventory", nullable = false, columnDefinition = "text")
+    private String runtimeInventory;
+
     @Column(nullable = false, length = 512)
     private String notes;
 
@@ -154,6 +163,30 @@ public class ComponentDefinition extends BaseEntity {
         this.rollbackOrder = rollbackOrder;
     }
 
+    public String getActionTypes() {
+        return actionTypes;
+    }
+
+    public void setActionTypes(String actionTypes) {
+        this.actionTypes = actionTypes;
+    }
+
+    public String getObservedStatus() {
+        return observedStatus;
+    }
+
+    public void setObservedStatus(String observedStatus) {
+        this.observedStatus = observedStatus;
+    }
+
+    public String getRuntimeInventory() {
+        return runtimeInventory;
+    }
+
+    public void setRuntimeInventory(String runtimeInventory) {
+        this.runtimeInventory = runtimeInventory;
+    }
+
     public String getNotes() {
         return notes;
     }
@@ -162,4 +195,3 @@ public class ComponentDefinition extends BaseEntity {
         this.notes = notes;
     }
 }
-

@@ -75,8 +75,8 @@ class ReleaseChangeServiceImplWorkflowTest {
 
         ReleaseChangeDetailDTO created = service.create(createRequest);
         assertEquals(ChangeStatus.DRAFT.name(), created.status);
-        assertEquals(11, created.nodes.size());
-        assertEquals(11, created.items.size());
+        assertEquals(createRequest.componentKeys.size(), created.nodes.size());
+        assertEquals(createRequest.componentKeys.size(), created.items.size());
 
         service.submit(created.id);
 
@@ -115,7 +115,7 @@ class ReleaseChangeServiceImplWorkflowTest {
         }
 
         ReleaseChangeDetailDTO afterEvidence = service.detail(created.id);
-        assertEquals(22, afterEvidence.evidences.size());
+        assertEquals(createRequest.componentKeys.size() * 2, afterEvidence.evidences.size());
 
         completeItemOperations(service, created.id);
         service.functionTest(created.id);
@@ -357,6 +357,7 @@ class ReleaseChangeServiceImplWorkflowTest {
                     "kafka",
                     "elasticsearch",
                     "hbase",
+                    "xxl-job",
                     "java-backend",
                     "vue-frontend",
                     "nginx",
@@ -386,6 +387,7 @@ class ReleaseChangeServiceImplWorkflowTest {
             putComponent(component("kafka", "Kafka", "MESSAGE", "/data/osh/config/kafka", "/data/osh/data/kafka", "/data/osh/compose/kafka", true, true, true, false, true, 40, 60, "Kafka"));
             putComponent(component("elasticsearch", "Elasticsearch", "SEARCH", "/data/osh/config/es", "/data/osh/data/es", "/data/osh/compose/es", true, true, true, false, true, 50, 50, "Elasticsearch"));
             putComponent(component("hbase", "HBase", "STORAGE", "/data/osh/config/hbase", "/data/osh/data/hbase", "/data/osh/compose/hbase", true, true, true, false, true, 60, 40, "HBase"));
+            putComponent(component("xxl-job", "XXLJob", "SCHEDULER", "/data/osh/config/xxl-job", "/data/osh/data/xxl-job", "/data/osh/compose/xxl-job", true, true, true, false, true, 65, 35, "XXLJob"));
             putComponent(component("java-backend", "Java 后端服务", "APP", "/data/osh/config/backend", "/data/osh/apps/backend", "/data/osh/compose/backend", true, true, true, false, true, 70, 30, "Java 后端"));
             putComponent(component("vue-frontend", "Vue 前端", "WEB", "/data/osh/config/frontend", "/data/osh/apps/frontend", "/data/osh/compose/frontend", true, true, true, false, true, 80, 20, "Vue 前端"));
             putComponent(component("nginx", "Nginx 网关", "GATEWAY", "/data/osh/config/nginx", "/data/osh/data/nginx", "/data/osh/compose/nginx", true, true, true, false, true, 90, 10, "Nginx"));
@@ -581,8 +583,63 @@ class ReleaseChangeServiceImplWorkflowTest {
             component.setCore(core);
             component.setInstallOrder(installOrder);
             component.setRollbackOrder(rollbackOrder);
+            component.setActionTypes(actionTypes(key));
+            component.setObservedStatus("FOUND_TEST_AND_PROD");
+            component.setRuntimeInventory("test/prod mock inventory for " + key);
             component.setNotes(notes);
             return component;
+        }
+
+        private String actionTypes(String key) {
+            if ("mysql".equals(key)) {
+                return "MYSQL_SQL,SQL,CONFIG,COMPOSE_CHANGE";
+            }
+            if ("redis".equals(key)) {
+                return "REDIS_SCRIPT,REDIS_CONFIG,CONFIG,COMPOSE_CHANGE";
+            }
+            if ("nacos".equals(key)) {
+                return "NACOS_CONFIG,CONFIG,COMPOSE_CHANGE";
+            }
+            if ("zookeeper".equals(key)) {
+                return "ZOOKEEPER_CONFIG,CONFIG,COMPOSE_CHANGE";
+            }
+            if ("kafka".equals(key)) {
+                return "KAFKA_TOPIC,KAFKA_CONFIG,CONFIG,COMPOSE_CHANGE";
+            }
+            if ("elasticsearch".equals(key)) {
+                return "ES_INDEX,ES_CONFIG,CONFIG,COMPOSE_CHANGE";
+            }
+            if ("kibana".equals(key)) {
+                return "KIBANA_CONFIG,CONFIG,COMPOSE_CHANGE";
+            }
+            if ("hbase".equals(key)) {
+                return "HBASE_DDL,HBASE_CONFIG,CONFIG,COMPOSE_CHANGE";
+            }
+            if ("xxl-job".equals(key)) {
+                return "XXLJOB_TASK,XXLJOB_CONFIG,CONFIG,COMPOSE_CHANGE";
+            }
+            if ("flink".equals(key)) {
+                return "FLINK_JOB,FLINK_CONFIG,CONFIG,COMPOSE_CHANGE";
+            }
+            if ("java-backend".equals(key) || "vue-frontend".equals(key)) {
+                return "CODE,CONFIG,COMPOSE_CHANGE";
+            }
+            if ("filebeat".equals(key)) {
+                return "FILEBEAT_CONFIG,CONFIG,COMPOSE_CHANGE";
+            }
+            if ("otel-collector".equals(key)) {
+                return "OTEL_CONFIG,CONFIG,COMPOSE_CHANGE";
+            }
+            if ("secret-manager".equals(key)) {
+                return "SECRET_CONFIG,CONFIG,COMPOSE_CHANGE";
+            }
+            if ("nginx".equals(key)) {
+                return "NGINX_CONFIG,CONFIG,COMPOSE_CHANGE";
+            }
+            if ("qdrant".equals(key)) {
+                return "QDRANT_COLLECTION,QDRANT_CONFIG,CONFIG,COMPOSE_CHANGE";
+            }
+            return "CONFIG,COMPONENT,COMPOSE_CHANGE";
         }
 
         private Environment environment(String code, String name, String kind, String baseUrl, String blueUrl, String greenUrl,

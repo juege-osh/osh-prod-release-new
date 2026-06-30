@@ -15,7 +15,7 @@ COMPONENTS = [
     item.strip()
     for item in os.getenv(
         "OSH_RELEASE_COMPONENTS",
-        "mysql,redis,nacos,kafka,elasticsearch,hbase,java-backend,vue-frontend,nginx,docker-compose,mongodb",
+        "mysql,redis,nacos,zookeeper,kafka,elasticsearch,kibana,hbase,xxl-job,flink,java-backend,vue-frontend,filebeat,otel-collector,secret-manager,nginx,docker-compose,qdrant,mongodb",
     ).split(",")
     if item.strip()
 ]
@@ -137,7 +137,7 @@ def main():
 
     for payload in release_payloads():
         change = api("POST", f"/changes/{change_id}/items", token=token, body=payload)
-    print("已加入真实上线项: SQL + 配置 + 代码")
+    print("已加入真实上线项: MySQL SQL + Nacos 配置 + ES 索引 + Kafka Topic + HBase DDL + XXLJob 任务 + 代码")
 
     api("POST", f"/changes/{change_id}/submit", token=token, body={})
     api(
@@ -254,7 +254,7 @@ def complete_item_operations(change_id, token, items):
 def release_payloads():
     return [
         {
-            "itemType": "SQL",
+            "itemType": "MYSQL_SQL",
             "componentKey": "mysql",
             "title": "SQL 上线：订单状态字段",
             "payloadPath": "mysql/release/20260708/add-order-status.sql",
@@ -271,7 +271,7 @@ def release_payloads():
             "dataProbePlan": "对比 order_info 行数；课程和用户表变化必须为 0。",
         },
         {
-            "itemType": "CONFIG",
+            "itemType": "NACOS_CONFIG",
             "componentKey": "nacos",
             "title": "配置上线：订单超时配置",
             "payloadPath": "/data/osh/config/nacos/order-timeout.yaml",
@@ -286,6 +286,74 @@ def release_payloads():
             "verificationCommands": "curl -fsS http://127.0.0.1:18080/actuator/health",
             "testPlan": "验证配置读取、订单超时逻辑和回滚配置。",
             "dataProbePlan": "对比订单状态数量；课程和用户表变化必须为 0。",
+        },
+        {
+            "itemType": "ES_INDEX",
+            "componentKey": "elasticsearch",
+            "title": "ES 上线：订单搜索索引",
+            "payloadPath": "es/order_search_v20260708",
+            "changeContent": "新增订单搜索索引和别名，不改课程和用户模块。",
+            "executionContent": "PUT /order_search_v20260708\n{\"settings\":{\"number_of_shards\":1},\"mappings\":{\"properties\":{\"orderId\":{\"type\":\"keyword\"}}}}\nPOST /_aliases 切别名",
+            "rollbackContent": "POST /_aliases 切回旧索引；确认后删除 order_search_v20260708。",
+            "incrementalPlan": "先创建新索引，导入测试数据，绿环境验证后再切 alias。",
+            "rollbackPlan": "alias 切回旧索引，再删除新索引。",
+            "codeChangeSummary": "搜索接口继续读 alias，不直接写死新索引。",
+            "riskAnalysis": "风险在 mapping 不兼容、alias 指错和 reindex 漏字段；课程和用户模块不受影响。",
+            "bugAnalysis": "注意 mapping 类型、分片数、排序字段和查询性能。",
+            "verificationCommands": "GET _cat/indices\nGET _alias/order_search",
+            "testPlan": "验证索引创建、alias、搜索结果和回切。",
+            "dataProbePlan": "对比 ES 文档数；课程和用户表变化必须为 0。",
+        },
+        {
+            "itemType": "KAFKA_TOPIC",
+            "componentKey": "kafka",
+            "title": "Kafka 上线：订单事件 Topic",
+            "payloadPath": "topic: osh.order.event.v1",
+            "changeContent": "新增订单事件 topic，不改现有消费者。",
+            "executionContent": "kafka-topics --create --topic osh.order.event.v1 --partitions 3 --replication-factor 1",
+            "rollbackContent": "确认无生产消费后删除或停用 osh.order.event.v1。",
+            "incrementalPlan": "先 describe 确认不存在，再绿环境小流量生产消费。",
+            "rollbackPlan": "停生产者消费者，再删除或禁用新 topic。",
+            "codeChangeSummary": "生产者后续切到新 topic，消费者保持兼容。",
+            "riskAnalysis": "风险在分区数不可减少、消费组 lag 和重复消费。",
+            "bugAnalysis": "注意 topic 重名、retention 配置和消费组并发。",
+            "verificationCommands": "kafka-topics --describe --topic osh.order.event.v1",
+            "testPlan": "验证 topic、分区、副本和消费组 lag。",
+            "dataProbePlan": "对比 topicsChanged 和 lagDelta；课程和用户表变化必须为 0。",
+        },
+        {
+            "itemType": "HBASE_DDL",
+            "componentKey": "hbase",
+            "title": "HBase 上线：订单明细表",
+            "payloadPath": "hbase:osh:order_detail_v1",
+            "changeContent": "新增 HBase 订单明细表，不改课程和用户模块。",
+            "executionContent": "create_namespace 'osh'\ncreate 'osh:order_detail_v1', {NAME => 'cf', VERSIONS => 1}",
+            "rollbackContent": "disable 'osh:order_detail_v1'\ndrop 'osh:order_detail_v1'",
+            "incrementalPlan": "先 exists/describe，再绿环境建表并抽样读写。",
+            "rollbackPlan": "确认无写入依赖后 disable/drop 新表。",
+            "codeChangeSummary": "后续任务写新表，老链路保持不变。",
+            "riskAnalysis": "风险在列族配置、预分区和 region 影响；课程和用户模块不受影响。",
+            "bugAnalysis": "注意列族名、TTL、压缩配置和 disable 表影响。",
+            "verificationCommands": "exists 'osh:order_detail_v1'\ndescribe 'osh:order_detail_v1'",
+            "testPlan": "验证表结构、列族和抽样 rowkey 查询。",
+            "dataProbePlan": "对比 HBase tableDelta/rowDelta；课程和用户表变化必须为 0。",
+        },
+        {
+            "itemType": "XXLJOB_TASK",
+            "componentKey": "xxl-job",
+            "title": "XXLJob 上线：订单补偿任务",
+            "payloadPath": "job: orderCompensateJob",
+            "changeContent": "新增订单补偿任务，默认停用，人工验证后再启用。",
+            "executionContent": "jobHandler=orderCompensateJob\ncron=0 */5 * * * ?\nroute=FIRST\nblock=SERIAL_EXECUTION",
+            "rollbackContent": "停用 orderCompensateJob，恢复旧 cron/handler。",
+            "incrementalPlan": "测试环境手动触发一次，绿环境默认停用上线。",
+            "rollbackPlan": "停用任务，确认没有补偿中的批次。",
+            "codeChangeSummary": "任务 handler 已随后端发布，逻辑需幂等。",
+            "riskAnalysis": "风险在误触发、重复补偿、失败重试和幂等。",
+            "bugAnalysis": "注意 cron、路由策略、阻塞策略和失败重试。",
+            "verificationCommands": "检查 XXLJob 执行日志；手动触发一次测试任务。",
+            "testPlan": "验证任务保存、手动触发、日志和停用回滚。",
+            "dataProbePlan": "对比订单补偿数量；课程和用户表变化必须为 0。",
         },
         {
             "itemType": "CODE",

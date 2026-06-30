@@ -36,8 +36,7 @@ python3 -m py_compile scripts/smoke_release_flow.py
 
 echo "[6/6] sensitive value scan"
 if rg -n \
-  -e 'ljeuUHQK9658' \
-  -e 'mzbuSUJK6297' \
+  -e '[A-Za-z]{4}[A-Z]{4}[0-9]{4}' \
   -e 'change-this-jwt-secret' \
   -e 'change-me-osh-release' \
   -e 'password: \$\{OSH_DB_PASSWORD:osh_release\}' \

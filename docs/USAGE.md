@@ -42,13 +42,21 @@
    - MySQL
    - Redis
    - Nacos
+   - Zookeeper
    - Kafka
    - Elasticsearch
+   - Kibana
    - HBase
+   - XXLJob
+   - Flink
    - Java 后端
    - Vue 前端
+   - Filebeat
+   - OTel Collector
+   - Secret Manager
    - Nginx
    - Docker Compose
+   - Qdrant
    - MongoDB
 4. 负责人更新每个子 change 的内容、增量计划、回滚计划、测试计划和数据采集计划。
 
@@ -62,18 +70,36 @@
 
 ## 4.1 新增真实上线项
 
-变更单建好后，不是只能用默认组件。你可以继续点：
+变更单建好后，不是只能用默认组件。Change 详情页有 `组件上线工作台`，常用动作直接点：
 
-- `新增 SQL`：粘贴要上线的 SQL、回滚 SQL、影响行数、验证 SQL。
-- `新增配置`：粘贴 Nacos/Nginx/Compose 等配置 diff、目标文件路径、回滚配置。
-- `新增代码`：填写分支、commit 范围、构建产物、代码改动大纲、疑似 bug 和风险分析。
+- `新增 MySQL SQL`：上线几条 SQL，填执行 SQL、回滚 SQL、影响行数、验证 SQL。
+- `新增 ES 索引`：新增索引、mapping、settings、alias，填回切方案。
+- `新增 ES 配置`：修改 `elasticsearch.yml`、`jvm.options`，填滚动重启和回滚配置。
+- `新增 HBase DDL`：新增 namespace、表、列族、预分区，填 disable/drop 回滚。
+- `新增 HBase 配置`：修改 `hbase-site.xml`，填滚动方式和 region 影响。
+- `新增 Kafka Topic`：新增 topic，填分区、副本、retention、生产消费验证。
+- `新增 Kafka 配置`：修改 broker/topic 配置，填 lag 观察和回滚。
+- `Zookeeper 配置`：从组件目录进入，填 `zoo.cfg` diff、Kafka 影响和回滚。
+- `Kibana 配置`：从组件目录进入，填 `kibana.yml` diff、ES 地址和访问验证。
+- `新增 Nacos 配置`：填 dataId、group、namespace、diff 和上一版配置。
+- `新增 XXLJob 任务`：填 jobHandler、cron、路由策略、阻塞策略、停用回滚。
+- `XXLJob 配置`：填 admin/执行器配置、注册验证和回滚配置。
+- `Flink 任务`：从组件目录进入，填 jar、并发、checkpoint/savepoint 和回滚点。
+- `Flink 配置`：从组件目录进入，填 `flink-conf.yaml` diff 和 JM/TM 影响。
+- `新增 Redis 变更`：填 Lua/命令、key 前缀、TTL、回滚和 key 数对比。
+- `Filebeat 配置`：从组件目录进入，填日志路径、index、pipeline 和回滚配置。
+- `OTel 配置`：从组件目录进入，填 receiver/processor/exporter diff 和采样率。
+- `密钥服务配置`：只填 key 名和版本，不能保存密钥明文。
+- `Qdrant Collection`：从组件目录进入，填 collection、向量维度、alias 和回滚。
+- `新增代码发布`：填写分支、commit 范围、构建产物、代码改动大纲、疑似 bug 和风险分析。
+- `新增组件上线`：新增 MongoDB 等组件，填镜像、配置目录、数据目录、compose、healthcheck 和回滚 compose。
 
 每个上线项都会变成独立子 change 和上线节点，可以单独评审、单独测试、按顺序上线，也可以按节点回滚。同一个组件可以有多条上线项，比如默认 MySQL 组件项之外，再追加三条 SQL；平台会按节点顺序绑定，不会把新 SQL 覆盖到旧 MySQL 节点上。
 
 实际操作时按这个顺序来：
 
 1. 新建变更单。
-2. 点 `新增 SQL`、`新增配置` 或 `新增代码`。
+2. 在 `组件上线工作台` 点具体动作，比如 `新增 ES 索引`、`新增 Kafka Topic`。
 3. 填执行内容、回滚内容、风险分析、疑似 bug 分析和验证命令。
 4. 保存后看表格，确认多了一条独立上线节点。
 5. 点单项的 `分析`，让平台生成改动大纲、风险点、疑似 bug 和验证清单。

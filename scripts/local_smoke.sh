@@ -26,6 +26,11 @@ cleanup() {
 trap cleanup EXIT
 
 echo "starting local backend on port $PORT"
+APP_JWT_SECRET="${APP_JWT_SECRET:-local-smoke-jwt-secret-at-least-32-chars}" \
+OSH_SEED_JUEGE_PASSWORD="$PASSWORD" \
+OSH_SEED_REVIEWER_A_PASSWORD="${OSH_SEED_REVIEWER_A_PASSWORD:-Review@2026}" \
+OSH_SEED_REVIEWER_B_PASSWORD="${OSH_SEED_REVIEWER_B_PASSWORD:-Review@2026}" \
+OSH_SEED_OPS_PASSWORD="${OSH_SEED_OPS_PASSWORD:-Ops@2026}" \
 mvn -q -pl backend spring-boot:run \
   -Dspring-boot.run.arguments="--server.port=${PORT} --spring.datasource.url=jdbc:h2:file:${DB_FILE};MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE" \
   >"$LOG_FILE" 2>&1 &

@@ -173,13 +173,21 @@ public class BootstrapServiceImpl implements BootstrapService {
         component("mysql", "MySQL", "DATABASE", "/data/osh/config/mysql", "/data/osh/data/mysql", "/data/osh/compose/mysql", true, true, true, false, true, 10, 90, "增量 SQL 必须可回滚，禁止直接改课程和用户业务数据。");
         component("redis", "Redis", "CACHE", "/data/osh/config/redis", "/data/osh/data/redis", "/data/osh/compose/redis", true, true, true, false, true, 20, 80, "上线前后采集 key 数和关键前缀摘要。");
         component("nacos", "Nacos", "CONFIG", "/data/osh/config/nacos", "/data/osh/data/nacos", "/data/osh/compose/nacos", true, true, true, false, true, 30, 70, "配置变更先上绿环境，保留上一版配置快照。");
+        component("zookeeper", "Zookeeper", "COORDINATION", "/data/osh/config/zookeeper", "/data/osh/data/zookeeper", "/data/osh/compose/zookeeper", true, true, true, false, true, 35, 65, "Kafka 依赖组件，配置和 compose 变更必须跟 Kafka 节点分开评审。");
         component("kafka", "Kafka", "MESSAGE", "/data/osh/config/kafka", "/data/osh/data/kafka", "/data/osh/compose/kafka", true, true, true, false, true, 40, 60, "记录 topic、consumer group 和 lag 摘要。");
         component("elasticsearch", "Elasticsearch", "SEARCH", "/data/osh/config/es", "/data/osh/data/es", "/data/osh/compose/es", true, true, true, false, true, 50, 50, "索引变更必须带别名切换和回滚说明。");
+        component("kibana", "Kibana", "SEARCH_UI", "/data/osh/config/kibana", "/data/osh/data/kibana", "/data/osh/compose/kibana", true, true, true, false, false, 55, 45, "ES 配套控制台，配置变更要跟 ES 版本兼容。");
         component("hbase", "HBase", "STORAGE", "/data/osh/config/hbase", "/data/osh/data/hbase", "/data/osh/compose/hbase", true, true, true, false, true, 60, 40, "采集 namespace/table 摘要，不导出敏感业务明细。");
+        component("xxl-job", "XXLJob", "SCHEDULER", "/data/osh/config/xxl-job", "/data/osh/data/xxl-job", "/data/osh/compose/xxl-job", true, true, true, false, true, 65, 35, "任务变更必须说明 cron、handler、路由策略、阻塞策略和回滚停用方式。");
+        component("flink", "Flink", "STREAM", "/data/osh/config/flink", "/data/osh/data/flink", "/data/osh/compose/flink", true, true, true, false, true, 68, 32, "流任务上线要记录 job、checkpoint/savepoint、并发和回滚点。");
         component("java-backend", "Java 后端服务", "APP", "/data/osh/config/backend", "/data/osh/apps/backend", "/data/osh/compose/backend", true, true, true, false, true, 70, 30, "后端只从 release 分支构建，先发布绿环境。");
         component("vue-frontend", "Vue 前端", "WEB", "/data/osh/config/frontend", "/data/osh/apps/frontend", "/data/osh/compose/frontend", true, true, true, false, true, 80, 20, "前端静态资源带版本号，支持快速回滚。");
+        component("filebeat", "Filebeat", "LOG", "/data/osh/config/filebeat", "/data/osh/data/filebeat", "/data/osh/compose/filebeat", true, true, true, false, false, 84, 16, "日志采集变更要确认路径、索引和回滚采集配置。");
+        component("otel-collector", "OTel Collector", "OBSERVABILITY", "/data/osh/config/otel-collector", "/data/osh/data/otel-collector", "/data/osh/compose/otel-collector", true, true, true, false, false, 86, 14, "链路采集变更要确认 exporter、采样率和回滚配置。");
+        component("secret-manager", "Secret Manager", "SECRET", "/data/osh/config/secret-manager", "/data/osh/data/secret-manager", "/data/osh/compose/secret-manager", true, true, true, false, true, 88, 12, "密钥服务只登记配置路径和版本，不在治理台保存密钥明文。");
         component("nginx", "Nginx 网关", "GATEWAY", "/data/osh/config/nginx", "/data/osh/data/nginx", "/data/osh/compose/nginx", true, true, true, false, true, 90, 10, "蓝绿切流只通过网关配置切换，必须保留上一版。");
         component("docker-compose", "Docker Compose 编排", "ORCHESTRATION", "/data/osh/config/compose", "/data/osh/data/compose", "/data/osh/compose", true, true, true, false, true, 100, 5, "新增组件必须符合配置目录、数据目录、compose 文件规范。");
+        component("qdrant", "Qdrant", "VECTOR", "/data/osh/config/qdrant", "/data/osh/data/qdrant", "/data/osh/compose/qdrant", true, true, true, true, false, 105, 3, "测试服发现向量库组件，新增 collection 或配置变更要按扩展组件治理。");
         component("mongodb", "MongoDB 扩展组件", "DATABASE", "/data/osh/config/mongodb", "/data/osh/data/mongodb", "/data/osh/compose/mongodb", true, true, true, true, false, 110, 1, "扩展组件样例，可按同一目录规范接入。");
     }
 
@@ -200,8 +208,140 @@ public class BootstrapServiceImpl implements BootstrapService {
         component.setCore(core);
         component.setInstallOrder(installOrder);
         component.setRollbackOrder(rollbackOrder);
+        component.setActionTypes(actionTypesFor(key));
+        component.setObservedStatus(observedStatusFor(key));
+        component.setRuntimeInventory(runtimeInventoryFor(key));
         component.setNotes(notes);
         componentRepository.save(component);
+    }
+
+    private String actionTypesFor(String key) {
+        if ("mysql".equals(key)) {
+            return "MYSQL_SQL,SQL,CONFIG,COMPOSE_CHANGE";
+        }
+        if ("redis".equals(key)) {
+            return "REDIS_SCRIPT,REDIS_CONFIG,CONFIG,COMPOSE_CHANGE";
+        }
+        if ("nacos".equals(key)) {
+            return "NACOS_CONFIG,CONFIG,COMPOSE_CHANGE";
+        }
+        if ("zookeeper".equals(key)) {
+            return "ZOOKEEPER_CONFIG,CONFIG,COMPOSE_CHANGE";
+        }
+        if ("kafka".equals(key)) {
+            return "KAFKA_TOPIC,KAFKA_CONFIG,CONFIG,COMPOSE_CHANGE";
+        }
+        if ("elasticsearch".equals(key)) {
+            return "ES_INDEX,ES_CONFIG,CONFIG,COMPOSE_CHANGE";
+        }
+        if ("kibana".equals(key)) {
+            return "KIBANA_CONFIG,CONFIG,COMPOSE_CHANGE";
+        }
+        if ("hbase".equals(key)) {
+            return "HBASE_DDL,HBASE_CONFIG,CONFIG,COMPOSE_CHANGE";
+        }
+        if ("xxl-job".equals(key)) {
+            return "XXLJOB_TASK,XXLJOB_CONFIG,CONFIG,COMPOSE_CHANGE";
+        }
+        if ("flink".equals(key)) {
+            return "FLINK_JOB,FLINK_CONFIG,CONFIG,COMPOSE_CHANGE";
+        }
+        if ("java-backend".equals(key) || "vue-frontend".equals(key)) {
+            return "CODE,CONFIG,COMPOSE_CHANGE";
+        }
+        if ("filebeat".equals(key)) {
+            return "FILEBEAT_CONFIG,CONFIG,COMPOSE_CHANGE";
+        }
+        if ("otel-collector".equals(key)) {
+            return "OTEL_CONFIG,CONFIG,COMPOSE_CHANGE";
+        }
+        if ("secret-manager".equals(key)) {
+            return "SECRET_CONFIG,CONFIG,COMPOSE_CHANGE";
+        }
+        if ("nginx".equals(key)) {
+            return "NGINX_CONFIG,CONFIG,COMPOSE_CHANGE";
+        }
+        if ("qdrant".equals(key)) {
+            return "QDRANT_COLLECTION,QDRANT_CONFIG,CONFIG,COMPOSE_CHANGE";
+        }
+        if ("mongodb".equals(key)) {
+            return "MONGODB_SCRIPT,CONFIG,COMPOSE_CHANGE";
+        }
+        return "CONFIG,COMPONENT,COMPOSE_CHANGE";
+    }
+
+    private String observedStatusFor(String key) {
+        if ("hbase".equals(key) || "mongodb".equals(key)) {
+            return "SUPPORTED_NOT_FOUND";
+        }
+        if ("qdrant".equals(key)) {
+            return "TEST_ONLY_FOUND";
+        }
+        if ("vue-frontend".equals(key)) {
+            return "BEHIND_NGINX";
+        }
+        return "FOUND_TEST_AND_PROD";
+    }
+
+    private String runtimeInventoryFor(String key) {
+        if ("mysql".equals(key)) {
+            return "test: osh-mysql:53306, osh-payment-mysql:3307; prod-blue: osh-mysql:53306, osh-payment-mysql:3307; prod-green: osh-g-mysql:23306";
+        }
+        if ("redis".equals(key)) {
+            return "test: osh-redis:56379; prod-blue: osh-redis:56379; prod-green: osh-g-redis:26379";
+        }
+        if ("nacos".equals(key)) {
+            return "test: osh-nacos:58848; prod-blue: osh-nacos:58848; prod-green: osh-g-nacos:28848";
+        }
+        if ("zookeeper".equals(key)) {
+            return "test: osh-zookeeper:52181; prod-blue: osh-zookeeper:52181; prod-green: osh-g-zookeeper:22181";
+        }
+        if ("kafka".equals(key)) {
+            return "test: osh-kafka:59092; prod-blue: osh-kafka:59092; prod-green: osh-g-kafka:29092";
+        }
+        if ("elasticsearch".equals(key)) {
+            return "test: osh-es:59200/59300; prod-blue: osh-es:59200/59300; prod-green: osh-g-es:29200/29300";
+        }
+        if ("kibana".equals(key)) {
+            return "test: osh-kibana:55601; prod-blue: osh-kibana:55601; prod-green: osh-g-kibana:25601";
+        }
+        if ("hbase".equals(key)) {
+            return "test/prod docker ps 未发现 HBase 容器；平台保留 HBASE_DDL/HBASE_CONFIG 治理入口，真实执行前必须先确认实例位置";
+        }
+        if ("xxl-job".equals(key)) {
+            return "test: osh-xxl-job:58086; prod-blue: osh-xxl-job:58086; prod-green: osh-g-xxl-job:28086";
+        }
+        if ("flink".equals(key)) {
+            return "test: osh-flink-jm:58088 + tm1-6; prod-blue: osh-flink-jm:58088 + tm1-6; prod-green: osh-g-flink-jm:28088 + tm1-6";
+        }
+        if ("java-backend".equals(key)) {
+            return "test: osh-backend:58081/8081; prod-blue: osh-backend:58081; prod-green: osh-g-backend:28081";
+        }
+        if ("vue-frontend".equals(key)) {
+            return "frontend served by nginx; test/prod external domains are juegeresource.top and osh.lol";
+        }
+        if ("filebeat".equals(key)) {
+            return "test: osh-filebeat; prod-blue: osh-filebeat; prod-green: osh-g-filebeat";
+        }
+        if ("otel-collector".equals(key)) {
+            return "test: osh-otel-collector:54317/54318; prod-blue: osh-otel-collector:54317/54318; prod-green: osh-g-otel-collector:24317/24318";
+        }
+        if ("secret-manager".equals(key)) {
+            return "test: osh-secret-manager:59100; prod-blue: osh-secret-manager:59100; prod-green: osh-g-secret-manager:29100";
+        }
+        if ("nginx".equals(key)) {
+            return "test: osh-nginx:80/58080 plus host nginx; prod-blue: osh-nginx:80/58080 plus host nginx; prod-green: osh-g-nginx:28080/12781";
+        }
+        if ("docker-compose".equals(key)) {
+            return "test compose found under /opt and /www; prod compose found under /opt/osh-prod-release-new plus backups";
+        }
+        if ("qdrant".equals(key)) {
+            return "test: osh-qdrant:56333/56334; prod docker ps 未发现；作为扩展组件保留治理入口";
+        }
+        if ("mongodb".equals(key)) {
+            return "test/prod docker ps 未发现 MongoDB 容器；作为扩展组件样例保留治理入口";
+        }
+        return "read-only inventory pending";
     }
 
     private void seedDemoChange() {
@@ -226,7 +366,7 @@ public class BootstrapServiceImpl implements BootstrapService {
         change.setDemoRequired(false);
         change.setDemoConfirmed(false);
         change.setRiskLevel("HIGH");
-        change.setSummary("覆盖 MySQL、Redis、ES、Kafka、HBase、Nacos、后端、前端、Nginx、Compose 和 MongoDB 扩展组件。");
+        change.setSummary("覆盖测试服和生产蓝绿盘点到的 MySQL、Redis、Nacos、Kafka、ES、XXLJob、Flink、Nginx、日志、链路、Compose 和扩展组件。");
         change.setContentJson("{\"scope\":\"release/20260708\",\"prodWritePolicy\":\"manual-confirm-required\",\"courseAndUserModules\":\"protected\"}");
         change.setCurrentStep("自动化测试中");
         change.setFinalMessage("演示数据，只写治理库，不执行生产命令。");
@@ -249,8 +389,9 @@ public class BootstrapServiceImpl implements BootstrapService {
         List<ComponentDefinition> components = componentRepository.findAll();
         components.sort(Comparator.comparingInt(ComponentDefinition::getInstallOrder));
         List<ComponentDefinition> selected = new java.util.ArrayList<ComponentDefinition>();
-        List<String> keys = Arrays.asList("mysql", "redis", "nacos", "kafka", "elasticsearch", "hbase",
-                "java-backend", "vue-frontend", "nginx", "docker-compose", "mongodb");
+        List<String> keys = Arrays.asList("mysql", "redis", "nacos", "zookeeper", "kafka", "elasticsearch", "kibana",
+                "hbase", "xxl-job", "flink", "java-backend", "vue-frontend", "filebeat", "otel-collector",
+                "secret-manager", "nginx", "docker-compose", "qdrant", "mongodb");
         for (ComponentDefinition component : components) {
             if (keys.contains(component.getComponentKey())) {
                 selected.add(component);
@@ -443,7 +584,7 @@ public class BootstrapServiceImpl implements BootstrapService {
         }
         if (!types.contains("SPEC")) {
             report(change, "SPEC", "组件规范校验样例", "全组件配置目录、数据目录、部署目录、增量计划和回滚计划已齐。",
-                    "{\"components\":\"mysql,redis,nacos,kafka,elasticsearch,hbase,backend,frontend,nginx,compose,mongodb\"}",
+                    "{\"components\":\"mysql,redis,nacos,zookeeper,kafka,elasticsearch,kibana,hbase,xxl-job,flink,backend,frontend,filebeat,otel,secret-manager,nginx,compose,qdrant,mongodb\"}",
                     "规范齐全。");
         }
         if (!types.contains("FUNCTION")) {

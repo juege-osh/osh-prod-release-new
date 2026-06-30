@@ -42,6 +42,7 @@ import com.juege.oshrelease.repo.TestReportRepository;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -1254,18 +1255,77 @@ public class ReleaseChangeServiceImpl implements com.juege.oshrelease.service.Re
 
     private String inferComponentKey(String itemType) {
         String normalized = normalizeItemType(itemType);
-        if ("SQL".equals(normalized)) {
+        if ("SQL".equals(normalized) || "MYSQL_SQL".equals(normalized)) {
             return "mysql";
+        }
+        if ("REDIS_SCRIPT".equals(normalized) || "REDIS_CONFIG".equals(normalized)) {
+            return "redis";
+        }
+        if ("NACOS_CONFIG".equals(normalized)) {
+            return "nacos";
+        }
+        if ("KAFKA_TOPIC".equals(normalized) || "KAFKA_CONFIG".equals(normalized)) {
+            return "kafka";
+        }
+        if ("ZOOKEEPER_CONFIG".equals(normalized)) {
+            return "zookeeper";
+        }
+        if ("ES_INDEX".equals(normalized) || "ES_CONFIG".equals(normalized)) {
+            return "elasticsearch";
+        }
+        if ("KIBANA_CONFIG".equals(normalized)) {
+            return "kibana";
+        }
+        if ("HBASE_DDL".equals(normalized) || "HBASE_CONFIG".equals(normalized)) {
+            return "hbase";
+        }
+        if ("XXLJOB_TASK".equals(normalized) || "XXLJOB_CONFIG".equals(normalized)) {
+            return "xxl-job";
+        }
+        if ("FLINK_JOB".equals(normalized) || "FLINK_CONFIG".equals(normalized)) {
+            return "flink";
         }
         if ("CODE".equals(normalized)) {
             return "java-backend";
+        }
+        if ("FILEBEAT_CONFIG".equals(normalized)) {
+            return "filebeat";
+        }
+        if ("OTEL_CONFIG".equals(normalized)) {
+            return "otel-collector";
+        }
+        if ("SECRET_CONFIG".equals(normalized)) {
+            return "secret-manager";
+        }
+        if ("NGINX_CONFIG".equals(normalized)) {
+            return "nginx";
+        }
+        if ("QDRANT_COLLECTION".equals(normalized) || "QDRANT_CONFIG".equals(normalized)) {
+            return "qdrant";
+        }
+        if ("COMPOSE_CHANGE".equals(normalized)) {
+            return "docker-compose";
+        }
+        if ("MONGODB_SCRIPT".equals(normalized)) {
+            return "mongodb";
         }
         return "nacos";
     }
 
     private String normalizeItemType(String itemType) {
         String normalized = defaultText(itemType, "COMPONENT").trim().toUpperCase();
-        if ("SQL".equals(normalized) || "CONFIG".equals(normalized) || "CODE".equals(normalized) || "COMPONENT".equals(normalized)) {
+        List<String> supported = Arrays.asList(
+                "SQL", "MYSQL_SQL", "CONFIG", "CODE", "COMPONENT",
+                "REDIS_SCRIPT", "REDIS_CONFIG", "NACOS_CONFIG",
+                "KAFKA_TOPIC", "KAFKA_CONFIG", "ZOOKEEPER_CONFIG",
+                "ES_INDEX", "ES_CONFIG", "KIBANA_CONFIG",
+                "HBASE_DDL", "HBASE_CONFIG",
+                "XXLJOB_TASK", "XXLJOB_CONFIG",
+                "FLINK_JOB", "FLINK_CONFIG",
+                "FILEBEAT_CONFIG", "OTEL_CONFIG", "SECRET_CONFIG",
+                "NGINX_CONFIG", "COMPOSE_CHANGE", "QDRANT_COLLECTION", "QDRANT_CONFIG", "MONGODB_SCRIPT"
+        );
+        if (supported.contains(normalized)) {
             return normalized;
         }
         return "COMPONENT";
@@ -1273,11 +1333,32 @@ public class ReleaseChangeServiceImpl implements com.juege.oshrelease.service.Re
 
     private String itemTypeLabel(String itemType) {
         String normalized = normalizeItemType(itemType);
-        if ("SQL".equals(normalized)) {
+        if ("SQL".equals(normalized) || "MYSQL_SQL".equals(normalized)) {
             return "SQL ";
+        }
+        if ("ES_INDEX".equals(normalized)) {
+            return "ES 索引 ";
+        }
+        if ("HBASE_DDL".equals(normalized)) {
+            return "HBase DDL ";
+        }
+        if ("KAFKA_TOPIC".equals(normalized)) {
+            return "Kafka Topic ";
+        }
+        if ("FLINK_JOB".equals(normalized)) {
+            return "Flink 任务 ";
+        }
+        if ("QDRANT_COLLECTION".equals(normalized)) {
+            return "Qdrant Collection ";
+        }
+        if ("XXLJOB_TASK".equals(normalized)) {
+            return "XXLJob 任务 ";
         }
         if ("CONFIG".equals(normalized)) {
             return "配置 ";
+        }
+        if (normalized.endsWith("_CONFIG")) {
+            return normalized.replace("_CONFIG", " 配置 ");
         }
         if ("CODE".equals(normalized)) {
             return "代码 ";
@@ -1301,10 +1382,34 @@ public class ReleaseChangeServiceImpl implements com.juege.oshrelease.service.Re
 
     private String actionTypeFor(String itemType) {
         String normalized = normalizeItemType(itemType);
-        if ("SQL".equals(normalized)) {
+        if ("SQL".equals(normalized) || "MYSQL_SQL".equals(normalized)) {
             return "SQL_DRY_RUN";
         }
+        if ("ES_INDEX".equals(normalized)) {
+            return "ES_INDEX";
+        }
+        if ("HBASE_DDL".equals(normalized)) {
+            return "HBASE_DDL";
+        }
+        if ("KAFKA_TOPIC".equals(normalized)) {
+            return "KAFKA_TOPIC";
+        }
+        if ("FLINK_JOB".equals(normalized)) {
+            return "FLINK_JOB";
+        }
+        if ("QDRANT_COLLECTION".equals(normalized)) {
+            return "QDRANT_COLLECTION";
+        }
+        if ("XXLJOB_TASK".equals(normalized)) {
+            return "XXLJOB_TASK";
+        }
+        if ("REDIS_SCRIPT".equals(normalized)) {
+            return "REDIS_SCRIPT";
+        }
         if ("CONFIG".equals(normalized)) {
+            return "CONFIG_DIFF";
+        }
+        if (normalized.endsWith("_CONFIG")) {
             return "CONFIG_DIFF";
         }
         if ("CODE".equals(normalized)) {
@@ -1314,13 +1419,32 @@ public class ReleaseChangeServiceImpl implements com.juege.oshrelease.service.Re
     }
 
     private String commandHintFor(ReleaseChangeItem item) {
-        if ("SQL".equals(item.getItemType())) {
+        String type = normalizeItemType(item.getItemType());
+        if ("SQL".equals(type) || "MYSQL_SQL".equals(type)) {
             return "先 explain/dry-run/备份；真实执行必须觉哥确认";
         }
-        if ("CONFIG".equals(item.getItemType())) {
+        if ("ES_INDEX".equals(type)) {
+            return "先创建新索引和别名演练；真实切别名必须觉哥确认";
+        }
+        if ("HBASE_DDL".equals(type)) {
+            return "先 describe/exists 只读检查；真实 DDL 必须有回滚表方案";
+        }
+        if ("KAFKA_TOPIC".equals(type)) {
+            return "先检查 topic 是否存在、分区、副本和消费组影响";
+        }
+        if ("FLINK_JOB".equals(type)) {
+            return "先保存 savepoint/checkpoint，再在绿环境提交任务";
+        }
+        if ("QDRANT_COLLECTION".equals(type)) {
+            return "先检查 collection/schema/索引参数，再做隔离写入验证";
+        }
+        if ("XXLJOB_TASK".equals(type)) {
+            return "先在测试环境禁用状态演练，确认触发器和路由策略";
+        }
+        if ("CONFIG".equals(type) || type.endsWith("_CONFIG")) {
             return "先 diff 和配置校验；只允许先上绿环境";
         }
-        if ("CODE".equals(item.getItemType())) {
+        if ("CODE".equals(type)) {
             return "先构建和自动化测试；只允许先发绿环境";
         }
         return "先 dry-run，真实执行必须觉哥确认";
@@ -1328,12 +1452,36 @@ public class ReleaseChangeServiceImpl implements com.juege.oshrelease.service.Re
 
     private String analyzeCodeSummary(ReleaseChangeItem item) {
         String type = normalizeItemType(item.getItemType());
-        if ("SQL".equals(type)) {
+        if ("SQL".equals(type) || "MYSQL_SQL".equals(type)) {
             return "SQL 改动：" + firstLine(item.getExecutionContent())
                     + "；回滚：" + firstLine(item.getRollbackContent())
                     + "；重点看影响表、WHERE 条件、索引和幂等。";
         }
-        if ("CONFIG".equals(type)) {
+        if ("ES_INDEX".equals(type)) {
+            return "ES 索引改动：" + item.getPayloadPath()
+                    + "；重点看 mapping、settings、alias 切换、reindex 和回滚别名。";
+        }
+        if ("HBASE_DDL".equals(type)) {
+            return "HBase DDL：" + firstLine(item.getExecutionContent())
+                    + "；重点看 namespace、表、列族、预分区和 disable/enable 回滚步骤。";
+        }
+        if ("KAFKA_TOPIC".equals(type)) {
+            return "Kafka Topic：" + item.getPayloadPath()
+                    + "；重点看分区数、副本数、保留时间、生产者和消费组兼容。";
+        }
+        if ("FLINK_JOB".equals(type)) {
+            return "Flink 任务：" + item.getPayloadPath()
+                    + "；重点看 jar、并发、checkpoint/savepoint、状态兼容和回滚点。";
+        }
+        if ("QDRANT_COLLECTION".equals(type)) {
+            return "Qdrant Collection：" + item.getPayloadPath()
+                    + "；重点看向量维度、索引参数、collection 别名和回滚集合。";
+        }
+        if ("XXLJOB_TASK".equals(type)) {
+            return "XXLJob 任务：" + item.getPayloadPath()
+                    + "；重点看 cron、路由策略、阻塞策略、负责人和灰度启停。";
+        }
+        if ("CONFIG".equals(type) || type.endsWith("_CONFIG")) {
             return "配置改动：" + item.getPayloadPath()
                     + "；执行内容：" + firstLine(item.getExecutionContent())
                     + "；重点看刷新方式、默认值和回滚配置。";
@@ -1354,7 +1502,8 @@ public class ReleaseChangeServiceImpl implements com.juege.oshrelease.service.Re
         if (text.contains("user") || text.contains("用户")) {
             risks.add("涉及用户模块，数据量对比必须单独确认 0 异常");
         }
-        if ("SQL".equals(item.getItemType())) {
+        String type = normalizeItemType(item.getItemType());
+        if ("SQL".equals(type) || "MYSQL_SQL".equals(type)) {
             if (text.contains("drop ") || text.contains("truncate ") || text.contains("delete ")) {
                 risks.add("包含高危 SQL，必须先备份并确认 WHERE/影响行数");
             }
@@ -1365,10 +1514,28 @@ public class ReleaseChangeServiceImpl implements com.juege.oshrelease.service.Re
                 risks.add("DDL 可能锁表，必须确认窗口期和回滚方案");
             }
         }
-        if ("CONFIG".equals(item.getItemType())) {
+        if ("ES_INDEX".equals(type)) {
+            risks.add("ES 索引变更要确认 alias 回切、mapping 兼容和 reindex 影响");
+        }
+        if ("HBASE_DDL".equals(type)) {
+            risks.add("HBase DDL 要确认表 disable/enable 窗口、列族兼容和 region 影响");
+        }
+        if ("KAFKA_TOPIC".equals(type)) {
+            risks.add("Kafka topic 变更要确认分区不可减少、消费组 lag 和副本分布");
+        }
+        if ("FLINK_JOB".equals(type)) {
+            risks.add("Flink 任务要确认 savepoint、状态兼容、并发和数据重复处理");
+        }
+        if ("QDRANT_COLLECTION".equals(type)) {
+            risks.add("Qdrant collection 要确认向量维度、索引参数和旧 collection 回切");
+        }
+        if ("XXLJOB_TASK".equals(type)) {
+            risks.add("XXLJob 任务要确认是否误触发、路由策略和失败重试影响");
+        }
+        if ("CONFIG".equals(type) || type.endsWith("_CONFIG")) {
             risks.add("配置发布后要确认刷新方式，避免绿环境和蓝环境配置不一致");
         }
-        if ("CODE".equals(item.getItemType())) {
+        if ("CODE".equals(type)) {
             risks.add("代码发布要确认老版本兼容、缓存对象、枚举字段和前后端字段一致");
         }
         if (risks.isEmpty()) {
@@ -1379,10 +1546,28 @@ public class ReleaseChangeServiceImpl implements com.juege.oshrelease.service.Re
 
     private String analyzeBugRisk(ReleaseChangeItem item) {
         String type = normalizeItemType(item.getItemType());
-        if ("SQL".equals(type)) {
+        if ("SQL".equals(type) || "MYSQL_SQL".equals(type)) {
             return "疑似 bug：重复执行、索引名冲突、锁等待、默认值不兼容、老代码读写新字段。";
         }
-        if ("CONFIG".equals(type)) {
+        if ("ES_INDEX".equals(type)) {
+            return "疑似 bug：mapping 类型不兼容、alias 指错、分片数不合适、reindex 丢字段、查询排序变慢。";
+        }
+        if ("HBASE_DDL".equals(type)) {
+            return "疑似 bug：列族名写错、预分区不合理、TTL/压缩配置不一致、disable 表影响线上读写。";
+        }
+        if ("KAFKA_TOPIC".equals(type)) {
+            return "疑似 bug：topic 重名、分区数和消费者并发不匹配、副本不足、retention 配错导致消息提前清理。";
+        }
+        if ("FLINK_JOB".equals(type)) {
+            return "疑似 bug：savepoint 不兼容、并发变化导致重复消费、checkpoint 路径错误、watermark 延迟。";
+        }
+        if ("QDRANT_COLLECTION".equals(type)) {
+            return "疑似 bug：向量维度不一致、payload schema 漏字段、collection alias 指错、索引参数拖慢查询。";
+        }
+        if ("XXLJOB_TASK".equals(type)) {
+            return "疑似 bug：cron 写错、任务误启、路由策略不对、超时和失败重试造成重复处理。";
+        }
+        if ("CONFIG".equals(type) || type.endsWith("_CONFIG")) {
             return "疑似 bug：配置 key 拼写错误、配置未刷新、蓝绿配置不一致、默认值和代码读取不一致。";
         }
         if ("CODE".equals(type)) {
@@ -1393,10 +1578,28 @@ public class ReleaseChangeServiceImpl implements com.juege.oshrelease.service.Re
 
     private String analyzeVerificationCommands(ReleaseChangeItem item) {
         String type = normalizeItemType(item.getItemType());
-        if ("SQL".equals(type)) {
+        if ("SQL".equals(type) || "MYSQL_SQL".equals(type)) {
             return "dry-run：EXPLAIN 或事务回滚演练\n验证：检查影响行数、索引、课程/用户表变化为 0\n回滚验证：执行回滚 SQL 后再次检查行数和结构";
         }
-        if ("CONFIG".equals(type)) {
+        if ("ES_INDEX".equals(type)) {
+            return "dry-run：GET _cat/indices、GET _alias、校验 mapping/settings\n验证：写入测试文档或只读查询命中别名\n回滚验证：alias 切回旧索引，确认文档数和查询结果";
+        }
+        if ("HBASE_DDL".equals(type)) {
+            return "dry-run：exists/describe 目标表和 namespace\n验证：describe 表结构、抽样 row count、核心读路径\n回滚验证：按回滚 DDL 恢复列族或切回旧表";
+        }
+        if ("KAFKA_TOPIC".equals(type)) {
+            return "dry-run：kafka-topics --describe 检查 topic 是否存在\n验证：describe 分区副本、消费组 lag、生产消费小流量演练\n回滚验证：停生产者后删除或禁用新 topic";
+        }
+        if ("FLINK_JOB".equals(type)) {
+            return "dry-run：校验 jar、参数和 savepoint\n验证：Flink UI、checkpoint、lag、输出数量\n回滚验证：从上一版 savepoint 恢复";
+        }
+        if ("QDRANT_COLLECTION".equals(type)) {
+            return "dry-run：GET collections、校验向量维度和索引参数\n验证：写入测试向量并查询\n回滚验证：切回旧 collection/alias";
+        }
+        if ("XXLJOB_TASK".equals(type)) {
+            return "dry-run：测试环境保存为停用状态并手动触发一次\n验证：执行日志、失败重试、幂等结果\n回滚验证：停用任务或恢复旧 cron/handler";
+        }
+        if ("CONFIG".equals(type) || type.endsWith("_CONFIG")) {
             return "dry-run：配置语法校验和 diff\n验证：读取配置接口或健康检查\n回滚验证：恢复上一版配置并确认服务读取旧值";
         }
         if ("CODE".equals(type)) {
@@ -1552,6 +1755,8 @@ public class ReleaseChangeServiceImpl implements com.juege.oshrelease.service.Re
                 .append("\"kafka\":{\"topicsChanged\":0,\"lagDelta\":0},")
                 .append("\"elasticsearch\":{\"indexAliasChanged\":0,\"documentDelta\":0},")
                 .append("\"hbase\":{\"tableDelta\":0,\"rowDelta\":0},")
+                .append("\"flink\":{\"jobDelta\":0,\"checkpointHealthy\":true},")
+                .append("\"qdrant\":{\"collectionDelta\":0,\"pointDelta\":0},")
                 .append("\"nacos\":{\"configDelta\":\"governance-only\"},")
                 .append("\"payloads\":[");
         for (int i = 0; i < changeItems.size(); i++) {
