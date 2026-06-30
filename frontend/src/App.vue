@@ -327,7 +327,15 @@ async function refreshAll() {
 
 async function loadChange(id) {
   selectedChange.value = await api(`/changes/${id}`)
-  releaseGate.value = page.value === 'reports' ? await api(`/changes/${id}/reports`) : null
+  await loadReleaseGate()
+}
+
+async function loadReleaseGate() {
+  if (page.value === 'reports' && selectedChange.value) {
+    releaseGate.value = await api(`/changes/${selectedChange.value.id}/reports`)
+    return
+  }
+  releaseGate.value = null
 }
 
 async function createChange() {
@@ -472,8 +480,8 @@ async function saveItem() {
 async function operate(path, message, body) {
   await run(async () => {
     selectedChange.value = await post(path, body || {})
-    releaseGate.value = null
     await refreshAll()
+    await loadReleaseGate()
     notice.value = message
   })
 }
@@ -497,7 +505,7 @@ onMounted(async () => {
 watch(page, async (nextPage) => {
   if (nextPage === 'reports' && selectedChange.value) {
     await run(async () => {
-      releaseGate.value = await api(`/changes/${selectedChange.value.id}/reports`)
+      await loadReleaseGate()
     })
   }
 })
