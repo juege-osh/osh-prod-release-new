@@ -18,6 +18,16 @@ docker compose up -d --build
 - Web：`http://服务器IP:18081`
 - Health：`http://服务器IP:18080/actuator/health`
 
+启动后先跑 API 冒烟：
+
+```bash
+OSH_RELEASE_API_BASE=http://127.0.0.1:18080/api \
+OSH_RELEASE_PASSWORD='治理台密码' \
+python3 scripts/smoke_release_flow.py
+```
+
+如果要对远程治理台跑演练，必须额外设置 `OSH_RELEASE_ALLOW_REMOTE_SMOKE=1`，避免误写线上治理记录。
+
 ## 浏览器连通性检查
 
 2026-06-30 用内置浏览器检查生产 IP `149.88.92.159`：

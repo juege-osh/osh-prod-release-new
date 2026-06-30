@@ -44,6 +44,14 @@ docker compose up -d --build
 - 前端：http://localhost:18081
 - 后端：http://localhost:18080/actuator/health
 
+API 冒烟：
+
+```bash
+OSH_RELEASE_PASSWORD='治理台密码' python3 scripts/smoke_release_flow.py
+```
+
+脚本默认只打 `http://127.0.0.1:18080/api`，会验证缺报告不能切绿、报告齐全后才能切绿、回蓝和回滚记录是否正常。
+
 生产建议挂独立路径，不要覆盖 `https://osh.lol/` 主站首页。推荐路径：`/release-console/`，详细反代配置见 [DEPLOY.md](docs/DEPLOY.md)。
 
 ## 安全边界
