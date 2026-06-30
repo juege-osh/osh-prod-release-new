@@ -135,6 +135,10 @@ def main():
     change_id = change["id"]
     print("变更单:", change["changeCode"], "ID:", change_id)
 
+    for payload in release_payloads():
+        change = api("POST", f"/changes/{change_id}/items", token=token, body=payload)
+    print("已加入真实上线项: SQL + 配置 + 代码")
+
     api("POST", f"/changes/{change_id}/submit", token=token, body={})
     api(
         "POST",
@@ -212,6 +216,62 @@ def main():
 
     print("冒烟完成，最终状态:", detail["status"])
     print("课程/用户业务数据：脚本未连接业务库，只写治理库演练记录。")
+
+
+def release_payloads():
+    return [
+        {
+            "itemType": "SQL",
+            "componentKey": "mysql",
+            "title": "SQL 上线：订单状态字段",
+            "payloadPath": "mysql/release/20260708/add-order-status.sql",
+            "changeContent": "新增订单状态字段，不改课程和用户模块。",
+            "executionContent": "alter table order_info add column status varchar(32) default 'CREATED';",
+            "rollbackContent": "alter table order_info drop column status;",
+            "incrementalPlan": "先备份表结构，绿环境 dry-run，再执行 SQL。",
+            "rollbackPlan": "确认应用退回旧版本后执行回滚 SQL。",
+            "codeChangeSummary": "后端读取 status 字段，老数据默认 CREATED。",
+            "riskAnalysis": "风险在订单查询兼容性；课程和用户模块不受影响。",
+            "bugAnalysis": "注意默认值、老版本代码兼容、索引影响和回滚时序。",
+            "verificationCommands": "select count(*) from order_info where status is null;",
+            "testPlan": "验证订单列表、订单详情、回滚 SQL。",
+            "dataProbePlan": "对比 order_info 行数；课程和用户表变化必须为 0。",
+        },
+        {
+            "itemType": "CONFIG",
+            "componentKey": "nacos",
+            "title": "配置上线：订单超时配置",
+            "payloadPath": "/data/osh/config/nacos/order-timeout.yaml",
+            "changeContent": "调整订单超时配置，只先上绿环境。",
+            "executionContent": "order.timeoutSeconds: 900",
+            "rollbackContent": "order.timeoutSeconds: 600",
+            "incrementalPlan": "先 diff，再发布绿环境配置，观察接口返回。",
+            "rollbackPlan": "恢复上一版 nacos 配置并刷新服务。",
+            "codeChangeSummary": "非代码变更；后端读取原配置 key。",
+            "riskAnalysis": "风险在超时时间变化影响订单释放。",
+            "bugAnalysis": "注意配置 key 拼写、缓存刷新和灰度范围。",
+            "verificationCommands": "curl -fsS http://127.0.0.1:18080/actuator/health",
+            "testPlan": "验证配置读取、订单超时逻辑和回滚配置。",
+            "dataProbePlan": "对比订单状态数量；课程和用户表变化必须为 0。",
+        },
+        {
+            "itemType": "CODE",
+            "componentKey": "java-backend",
+            "title": "代码上线：订单状态兼容",
+            "payloadPath": "release/20260708",
+            "changeContent": "发布订单状态兼容逻辑。",
+            "executionContent": "branch: release/20260708\ncommitRange: latest release diff\nartifact: backend.jar",
+            "rollbackContent": "rollbackCommit: previous release\nartifact: previous backend.jar",
+            "incrementalPlan": "构建后只发绿环境，跑接口和数据对比。",
+            "rollbackPlan": "绿环境异常先回蓝，再回滚 backend.jar。",
+            "codeChangeSummary": "订单查询增加 status 字段兼容；不改课程和用户模块。",
+            "riskAnalysis": "风险在空值兼容、老版本前端字段展示和 SQL 性能。",
+            "bugAnalysis": "疑似 bug：空 status、枚举不匹配、缓存旧对象。",
+            "verificationCommands": "mvn -q -pl backend test",
+            "testPlan": "验证订单查询、详情、列表分页和回滚包。",
+            "dataProbePlan": "订单行数不变；课程和用户表变化必须为 0。",
+        },
+    ]
 
 
 if __name__ == "__main__":

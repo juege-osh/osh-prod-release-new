@@ -96,9 +96,17 @@ final class ReleaseChangeMapper {
         dto.ownerUsername = item.getOwnerUsername();
         dto.ownerDisplayName = item.getOwnerDisplayName();
         dto.title = item.getTitle();
+        dto.itemType = item.getItemType();
+        dto.payloadPath = item.getPayloadPath();
         dto.changeContent = item.getChangeContent();
+        dto.executionContent = item.getExecutionContent();
         dto.incrementalPlan = item.getIncrementalPlan();
+        dto.rollbackContent = item.getRollbackContent();
         dto.rollbackPlan = item.getRollbackPlan();
+        dto.codeChangeSummary = item.getCodeChangeSummary();
+        dto.riskAnalysis = item.getRiskAnalysis();
+        dto.bugAnalysis = item.getBugAnalysis();
+        dto.verificationCommands = item.getVerificationCommands();
         dto.testPlan = item.getTestPlan();
         dto.dataProbePlan = item.getDataProbePlan();
         dto.specStatus = item.getSpecStatus();

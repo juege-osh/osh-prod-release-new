@@ -28,6 +28,7 @@ body {
 
 button,
 input,
+select,
 textarea {
   font: inherit;
 }
@@ -101,6 +102,7 @@ label {
 }
 
 input,
+select,
 textarea {
   width: 100%;
   padding: 14px 16px;
@@ -306,6 +308,36 @@ dd {
   margin: 18px 0;
 }
 
+.payload-guide {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin: 18px 0;
+}
+
+.payload-guide article {
+  padding: 16px;
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgba(33, 122, 84, 0.28);
+  border-radius: 20px;
+  background: linear-gradient(135deg, rgba(255, 252, 242, 0.88), rgba(225, 244, 231, 0.58));
+}
+
+.payload-guide p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.payload-guide button {
+  width: fit-content;
+  padding: 9px 13px;
+  border-radius: 999px;
+  color: #fffaf0;
+  background: var(--green);
+}
+
 .action-row button {
   background: var(--blue);
 }
@@ -406,6 +438,30 @@ dd {
   background: rgba(255, 252, 242, 0.58);
 }
 
+.payload-editor {
+  border-style: solid;
+  background: rgba(225, 244, 231, 0.45);
+}
+
+.form-grid,
+.payload-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.payload-fields label:nth-child(1),
+.payload-fields label:nth-child(2) {
+  grid-column: span 2;
+}
+
+.block-muted {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  word-break: break-all;
+}
+
 .report-grid article,
 .component-grid article,
 .report-card {
@@ -490,7 +546,8 @@ pre {
 
   .grid,
   .component-grid,
-  .report-grid {
+  .report-grid,
+  .payload-guide {
     grid-template-columns: 1fr;
   }
 

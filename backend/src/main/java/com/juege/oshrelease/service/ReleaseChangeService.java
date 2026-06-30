@@ -2,6 +2,7 @@ package com.juege.oshrelease.service;
 
 import com.juege.oshrelease.dto.ReleaseChangeCreateRequest;
 import com.juege.oshrelease.dto.ReleaseChangeDetailDTO;
+import com.juege.oshrelease.dto.ReleaseChangeItemCreateRequest;
 import com.juege.oshrelease.dto.ReleaseChangeItemDTO;
 import com.juege.oshrelease.dto.ReleaseChangeItemUpdateRequest;
 import com.juege.oshrelease.dto.ReleaseChangeListItemDTO;
@@ -23,6 +24,7 @@ public interface ReleaseChangeService {
     ReleaseChangeDetailDTO submit(Long id);
     ReleaseChangeDetailDTO approve(Long id, ReleaseChangeOperationRequest request);
     ReleaseChangeDetailDTO demo(Long id, ReleaseChangeOperationRequest request);
+    ReleaseChangeDetailDTO createItem(Long changeId, ReleaseChangeItemCreateRequest request);
     ReleaseChangeDetailDTO updateItem(Long changeId, Long itemId, ReleaseChangeItemUpdateRequest request);
     ReleaseChangeDetailDTO reviewerTest(Long id, ReviewerTestEvidenceRequest request);
     ReleaseChangeDetailDTO validateSpecs(Long id);

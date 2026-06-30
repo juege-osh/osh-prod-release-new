@@ -6,6 +6,7 @@ import com.juege.oshrelease.common.NotFoundException;
 import com.juege.oshrelease.common.ReleaseType;
 import com.juege.oshrelease.dto.ReleaseChangeCreateRequest;
 import com.juege.oshrelease.dto.ReleaseChangeDetailDTO;
+import com.juege.oshrelease.dto.ReleaseChangeItemCreateRequest;
 import com.juege.oshrelease.dto.ReleaseChangeItemDTO;
 import com.juege.oshrelease.dto.ReleaseChangeItemUpdateRequest;
 import com.juege.oshrelease.dto.ReleaseChangeListItemDTO;
@@ -238,6 +239,60 @@ public class ReleaseChangeServiceImpl implements com.juege.oshrelease.service.Re
 
     @Override
     @Transactional
+    public ReleaseChangeDetailDTO createItem(Long changeId, ReleaseChangeItemCreateRequest request) {
+        ReleaseChange change = getChange(changeId);
+        if (request == null) {
+            throw new BusinessException("上线项不能为空");
+        }
+        String componentKey = defaultText(request.componentKey, inferComponentKey(request.itemType));
+        ComponentDefinition component = componentRepository.findByComponentKey(componentKey)
+                .orElseThrow(() -> new BusinessException("组件不存在：" + componentKey));
+        List<ReleaseChangeItem> existingItems = releaseChangeItemRepository.findByChangeIdOrderByItemOrderAsc(changeId);
+        int itemOrder = existingItems.size() + 1;
+
+        ReleaseChangeItem item = new ReleaseChangeItem();
+        item.setChangeId(changeId);
+        item.setItemKey(change.getChangeCode() + "-" + component.getComponentKey() + "-" + itemOrder);
+        item.setItemOrder(itemOrder);
+        item.setComponentKey(component.getComponentKey());
+        item.setComponentName(defaultText(request.componentName, component.getComponentName()));
+        item.setComponentType(defaultText(request.componentType, component.getComponentType()));
+        item.setOwnerUsername(defaultText(request.ownerUsername, change.getDeveloperUsername()));
+        item.setOwnerDisplayName(defaultText(request.ownerDisplayName, change.getDeveloperDisplayName()));
+        item.setTitle(defaultText(request.title, item.getComponentName() + " " + itemTypeLabel(request.itemType) + "上线"));
+        applyItemPayload(item, request, component);
+        item.setSpecStatus(validateItemSpec(item) ? "READY" : "NEEDS_FIX");
+        item.setLifecycleStatus("OWNER_UPDATED");
+        item.setReviewerAConfirmed(false);
+        item.setReviewerBConfirmed(false);
+        item.setJuegeConfirmed(false);
+        releaseChangeItemRepository.save(item);
+
+        ReleaseNode node = new ReleaseNode();
+        node.setChangeId(changeId);
+        node.setNodeKey("node-" + component.getComponentKey() + "-" + itemOrder);
+        node.setComponentKey(component.getComponentKey());
+        node.setComponentName(item.getTitle());
+        node.setNodeType(item.getItemType());
+        node.setNodeOrder(itemOrder);
+        node.setRollbackOrder(component.getRollbackOrder());
+        node.setStatus("PENDING");
+        node.setActionType(actionTypeFor(item.getItemType()));
+        node.setHostName("prod".equals(change.getTargetEnvCode()) ? "prod-green" : change.getTargetEnvCode());
+        node.setCommandHint(commandHintFor(item));
+        node.setConfigDir(component.getConfigDir());
+        node.setDataDir(component.getDataDir());
+        node.setDetailJson(itemExecutionDetail(item));
+        releaseNodeRepository.save(node);
+
+        change.setCurrentStep("已新增上线项，等待负责人补齐执行内容、回滚内容和风险分析");
+        change.setFinalMessage(item.getTitle() + " 已加入上线计划。");
+        releaseChangeRepository.save(change);
+        return toDetail(change);
+    }
+
+    @Override
+    @Transactional
     public ReleaseChangeDetailDTO updateItem(Long changeId, Long itemId, ReleaseChangeItemUpdateRequest request) {
         ReleaseChange change = getChange(changeId);
         ReleaseChangeItem item = getItem(changeId, itemId);
@@ -247,14 +302,11 @@ public class ReleaseChangeServiceImpl implements com.juege.oshrelease.service.Re
         item.setOwnerUsername(defaultText(request.ownerUsername, item.getOwnerUsername()));
         item.setOwnerDisplayName(defaultText(request.ownerDisplayName, item.getOwnerDisplayName()));
         item.setTitle(defaultText(request.title, item.getTitle()));
-        item.setChangeContent(defaultText(request.changeContent, item.getChangeContent()));
-        item.setIncrementalPlan(defaultText(request.incrementalPlan, item.getIncrementalPlan()));
-        item.setRollbackPlan(defaultText(request.rollbackPlan, item.getRollbackPlan()));
-        item.setTestPlan(defaultText(request.testPlan, item.getTestPlan()));
-        item.setDataProbePlan(defaultText(request.dataProbePlan, item.getDataProbePlan()));
+        applyItemPayload(item, request, componentRepository.findByComponentKey(item.getComponentKey()).orElse(null));
         item.setSpecStatus(validateItemSpec(item) ? "READY" : "NEEDS_FIX");
         item.setLifecycleStatus("OWNER_UPDATED");
         releaseChangeItemRepository.save(item);
+        refreshNodesForItem(changeId, item);
         change.setCurrentStep("子 change 已更新，等待规范校验和评审测试");
         change.setFinalMessage(item.getComponentName() + " 的上线内容已由负责人更新。");
         releaseChangeRepository.save(change);
@@ -365,9 +417,9 @@ public class ReleaseChangeServiceImpl implements com.juege.oshrelease.service.Re
         }
         saveReport(id, "FUNCTION", "功能测试报告",
                 "MySQL、Redis、Nacos、Kafka、ES、HBase、Java 接口、Vue 前端、Nginx 和 Docker Compose 均按节点完成 dry-run 检查。",
-                functionDetail(nodes), "功能测试覆盖本次变更节点，可以进入数据量对比。", true);
+                functionDetail(id, nodes), "功能测试覆盖本次变更节点，可以进入数据量对比。", true);
         addOperation(change, "AUTO_FUNCTION_TEST", "PASSED", change.getTargetEnvCode(), change.getTargetColor(),
-                "system", "自动化执行器", true, "功能测试 dry-run 通过。", functionDetail(nodes));
+                "system", "自动化执行器", true, "功能测试 dry-run 通过。", functionDetail(id, nodes));
         change.setStatus(ChangeStatus.TESTING);
         updateTestingStep(change);
         releaseChangeRepository.save(change);
@@ -382,11 +434,12 @@ public class ReleaseChangeServiceImpl implements com.juege.oshrelease.service.Re
         if (!hasPassedReport(id, "FUNCTION")) {
             throw new BusinessException("必须先通过功能测试");
         }
+        List<ReleaseChangeItem> changeItems = releaseChangeItemRepository.findByChangeIdOrderByItemOrderAsc(id);
         saveReport(id, "DATA", "数据量对比报告",
                 "上线前后只允许治理演练数据有变化，课程模块和用户模块新增、删除、修改均为 0。",
-                dataDetail(), "差异与上线内容一致，未发现课程和用户数据被改动。", true);
+                dataDetail(changeItems), "差异与上线内容一致，未发现课程和用户数据被改动。", true);
         addOperation(change, "AUTO_DATA_DIFF", "PASSED", change.getTargetEnvCode(), change.getTargetColor(),
-                "system", "自动化执行器", true, "数据量对比通过，核心业务数据未变化。", dataDetail());
+                "system", "自动化执行器", true, "数据量对比通过，核心业务数据未变化。", dataDetail(changeItems));
         change.setStatus(ChangeStatus.TESTING);
         updateTestingStep(change);
         releaseChangeRepository.save(change);
@@ -637,7 +690,7 @@ public class ReleaseChangeServiceImpl implements com.juege.oshrelease.service.Re
         for (ComponentDefinition component : components) {
             ReleaseNode node = new ReleaseNode();
             node.setChangeId(change.getId());
-            node.setNodeKey("node-" + component.getComponentKey());
+            node.setNodeKey("node-" + component.getComponentKey() + "-" + index);
             node.setComponentKey(component.getComponentKey());
             node.setComponentName(component.getComponentName());
             node.setNodeType(component.getComponentType());
@@ -662,9 +715,17 @@ public class ReleaseChangeServiceImpl implements com.juege.oshrelease.service.Re
             item.setOwnerUsername(change.getDeveloperUsername());
             item.setOwnerDisplayName(change.getDeveloperDisplayName());
             item.setTitle(component.getComponentName() + " 增量上线");
+            item.setItemType(defaultItemType(component));
+            item.setPayloadPath(component.getDeployPath());
             item.setChangeContent(defaultChangeContent(component));
+            item.setExecutionContent(defaultExecutionContent(component));
             item.setIncrementalPlan(defaultIncrementalPlan(component));
+            item.setRollbackContent(defaultRollbackContent(component));
             item.setRollbackPlan(defaultRollbackPlan(component));
+            item.setCodeChangeSummary(defaultCodeSummary(component));
+            item.setRiskAnalysis(defaultRiskAnalysis(component));
+            item.setBugAnalysis(defaultBugAnalysis(component));
+            item.setVerificationCommands(defaultVerificationCommands(component));
             item.setTestPlan(defaultTestPlan(component));
             item.setDataProbePlan(defaultDataProbePlan(component));
             item.setSpecStatus("READY");
@@ -923,6 +984,43 @@ public class ReleaseChangeServiceImpl implements com.juege.oshrelease.service.Re
         }
     }
 
+    private void refreshNodesForItem(Long changeId, ReleaseChangeItem item) {
+        ReleaseNode legacyMatch = null;
+        for (ReleaseNode node : releaseNodeRepository.findByChangeIdOrderByNodeOrderAsc(changeId)) {
+            if (node.getNodeKey().equals("node-" + item.getComponentKey() + "-" + item.getItemOrder())) {
+                updateNodeFromItem(node, item);
+                return;
+            }
+            if (node.getComponentKey().equals(item.getComponentKey())
+                    && node.getNodeOrder() == item.getItemOrder()) {
+                legacyMatch = node;
+            }
+        }
+        if (legacyMatch != null) {
+            updateNodeFromItem(legacyMatch, item);
+        }
+    }
+
+    private void updateNodeFromItem(ReleaseNode node, ReleaseChangeItem item) {
+        node.setComponentName(item.getTitle());
+        node.setNodeType(item.getItemType());
+        node.setActionType(actionTypeFor(item.getItemType()));
+        node.setCommandHint(commandHintFor(item));
+        node.setDetailJson(itemExecutionDetail(item));
+        releaseNodeRepository.save(node);
+    }
+
+    private List<ReleaseChangeItem> findItemsByNode(Long changeId, ReleaseNode node) {
+        List<ReleaseChangeItem> result = new ArrayList<ReleaseChangeItem>();
+        for (ReleaseChangeItem item : releaseChangeItemRepository.findByChangeIdOrderByItemOrderAsc(changeId)) {
+            if (node.getComponentKey().equals(item.getComponentKey())
+                    && node.getNodeOrder() == item.getItemOrder()) {
+                result.add(item);
+            }
+        }
+        return result;
+    }
+
     private boolean validateItemSpec(ReleaseChangeItem item) {
         ComponentDefinition component = componentRepository.findByComponentKey(item.getComponentKey()).orElse(null);
         return component != null
@@ -931,11 +1029,120 @@ public class ReleaseChangeServiceImpl implements com.juege.oshrelease.service.Re
                 && !isBlank(component.getConfigDir())
                 && !isBlank(component.getDataDir())
                 && !isBlank(component.getDeployPath())
+                && !isBlank(item.getItemType())
+                && !isBlank(item.getPayloadPath())
                 && !isBlank(item.getChangeContent())
+                && !isBlank(item.getExecutionContent())
                 && !isBlank(item.getIncrementalPlan())
+                && !isBlank(item.getRollbackContent())
                 && !isBlank(item.getRollbackPlan())
+                && !isBlank(item.getRiskAnalysis())
+                && !isBlank(item.getBugAnalysis())
+                && !isBlank(item.getVerificationCommands())
                 && !isBlank(item.getTestPlan())
                 && !isBlank(item.getDataProbePlan());
+    }
+
+    private void applyItemPayload(ReleaseChangeItem item, ReleaseChangeItemUpdateRequest request, ComponentDefinition component) {
+        String itemType = normalizeItemType(defaultText(request.itemType, item.getItemType()));
+        item.setItemType(itemType);
+        item.setPayloadPath(defaultText(request.payloadPath, defaultText(item.getPayloadPath(), component == null ? "" : component.getDeployPath())));
+        item.setChangeContent(defaultText(request.changeContent, defaultText(item.getChangeContent(), component == null ? "" : defaultChangeContent(component))));
+        item.setExecutionContent(defaultText(request.executionContent, defaultText(item.getExecutionContent(), component == null ? "" : defaultExecutionContent(component))));
+        item.setIncrementalPlan(defaultText(request.incrementalPlan, defaultText(item.getIncrementalPlan(), component == null ? "" : defaultIncrementalPlan(component))));
+        item.setRollbackContent(defaultText(request.rollbackContent, defaultText(item.getRollbackContent(), component == null ? "" : defaultRollbackContent(component))));
+        item.setRollbackPlan(defaultText(request.rollbackPlan, defaultText(item.getRollbackPlan(), component == null ? "" : defaultRollbackPlan(component))));
+        item.setCodeChangeSummary(defaultText(request.codeChangeSummary, defaultText(item.getCodeChangeSummary(), component == null ? "" : defaultCodeSummary(component))));
+        item.setRiskAnalysis(defaultText(request.riskAnalysis, defaultText(item.getRiskAnalysis(), component == null ? "" : defaultRiskAnalysis(component))));
+        item.setBugAnalysis(defaultText(request.bugAnalysis, defaultText(item.getBugAnalysis(), component == null ? "" : defaultBugAnalysis(component))));
+        item.setVerificationCommands(defaultText(request.verificationCommands, defaultText(item.getVerificationCommands(), component == null ? "" : defaultVerificationCommands(component))));
+        item.setTestPlan(defaultText(request.testPlan, defaultText(item.getTestPlan(), component == null ? "" : defaultTestPlan(component))));
+        item.setDataProbePlan(defaultText(request.dataProbePlan, defaultText(item.getDataProbePlan(), component == null ? "" : defaultDataProbePlan(component))));
+    }
+
+    private String inferComponentKey(String itemType) {
+        String normalized = normalizeItemType(itemType);
+        if ("SQL".equals(normalized)) {
+            return "mysql";
+        }
+        if ("CODE".equals(normalized)) {
+            return "java-backend";
+        }
+        return "nacos";
+    }
+
+    private String normalizeItemType(String itemType) {
+        String normalized = defaultText(itemType, "COMPONENT").trim().toUpperCase();
+        if ("SQL".equals(normalized) || "CONFIG".equals(normalized) || "CODE".equals(normalized) || "COMPONENT".equals(normalized)) {
+            return normalized;
+        }
+        return "COMPONENT";
+    }
+
+    private String itemTypeLabel(String itemType) {
+        String normalized = normalizeItemType(itemType);
+        if ("SQL".equals(normalized)) {
+            return "SQL ";
+        }
+        if ("CONFIG".equals(normalized)) {
+            return "配置 ";
+        }
+        if ("CODE".equals(normalized)) {
+            return "代码 ";
+        }
+        return "组件 ";
+    }
+
+    private String defaultItemType(ComponentDefinition component) {
+        if ("DATABASE".equals(component.getComponentType())) {
+            return "SQL";
+        }
+        if ("CONFIG".equals(component.getComponentType()) || "GATEWAY".equals(component.getComponentType())
+                || "ORCHESTRATION".equals(component.getComponentType())) {
+            return "CONFIG";
+        }
+        if ("APP".equals(component.getComponentType()) || "WEB".equals(component.getComponentType())) {
+            return "CODE";
+        }
+        return "COMPONENT";
+    }
+
+    private String actionTypeFor(String itemType) {
+        String normalized = normalizeItemType(itemType);
+        if ("SQL".equals(normalized)) {
+            return "SQL_DRY_RUN";
+        }
+        if ("CONFIG".equals(normalized)) {
+            return "CONFIG_DIFF";
+        }
+        if ("CODE".equals(normalized)) {
+            return "CODE_DEPLOY";
+        }
+        return "GREEN_FIRST_INCREMENTAL";
+    }
+
+    private String commandHintFor(ReleaseChangeItem item) {
+        if ("SQL".equals(item.getItemType())) {
+            return "先 explain/dry-run/备份；真实执行必须觉哥确认";
+        }
+        if ("CONFIG".equals(item.getItemType())) {
+            return "先 diff 和配置校验；只允许先上绿环境";
+        }
+        if ("CODE".equals(item.getItemType())) {
+            return "先构建和自动化测试；只允许先发绿环境";
+        }
+        return "先 dry-run，真实执行必须觉哥确认";
+    }
+
+    private String itemExecutionDetail(ReleaseChangeItem item) {
+        return "{\"itemType\":\"" + json(item.getItemType())
+                + "\",\"payloadPath\":\"" + json(item.getPayloadPath())
+                + "\",\"executionContent\":\"" + json(limit(item.getExecutionContent(), 600))
+                + "\",\"rollbackContent\":\"" + json(limit(item.getRollbackContent(), 600))
+                + "\",\"riskAnalysis\":\"" + json(limit(item.getRiskAnalysis(), 400))
+                + "\",\"bugAnalysis\":\"" + json(limit(item.getBugAnalysis(), 400))
+                + "\",\"verificationCommands\":\"" + json(limit(item.getVerificationCommands(), 400))
+                + "\",\"safeMode\":true}";
     }
 
     private String nodeDetail(ComponentDefinition component) {
@@ -953,13 +1160,58 @@ public class ReleaseChangeServiceImpl implements com.juege.oshrelease.service.Re
         return component.getComponentName() + " 只做增量上线演练：新增隔离配置、治理测试数据和回滚脚本，不改课程、用户等业务数据。";
     }
 
+    private String defaultExecutionContent(ComponentDefinition component) {
+        if ("DATABASE".equals(component.getComponentType())) {
+            return "-- 在这里粘贴要上线的 SQL；必须先写 WHERE、影响行数预估和幂等判断。";
+        }
+        if ("CONFIG".equals(component.getComponentType()) || "GATEWAY".equals(component.getComponentType())) {
+            return "# 在这里粘贴配置 diff 或目标配置片段。";
+        }
+        if ("APP".equals(component.getComponentType()) || "WEB".equals(component.getComponentType())) {
+            return "分支：release/20260708\n提交范围：填写 commit range\n构建产物：填写 jar 或静态资源路径";
+        }
+        return "填写本组件真实增量执行内容。";
+    }
+
     private String defaultIncrementalPlan(ComponentDefinition component) {
         return "按节点顺序先发绿环境；检查 " + component.getConfigDir() + "、" + component.getDataDir()
                 + " 和 " + component.getDeployPath() + "；真实执行前必须 dry-run 和备份。";
     }
 
+    private String defaultRollbackContent(ComponentDefinition component) {
+        if ("DATABASE".equals(component.getComponentType())) {
+            return "-- 在这里粘贴 SQL 回滚语句；必须说明备份表、恢复条件和影响行数。";
+        }
+        if ("CONFIG".equals(component.getComponentType()) || "GATEWAY".equals(component.getComponentType())) {
+            return "# 在这里粘贴回滚配置 diff 或上一版配置路径。";
+        }
+        if ("APP".equals(component.getComponentType()) || "WEB".equals(component.getComponentType())) {
+            return "回滚版本：填写上一版 commit/镜像/包路径\n回滚命令：填写 dry-run 后的安全命令";
+        }
+        return "填写本组件真实回滚内容。";
+    }
+
     private String defaultRollbackPlan(ComponentDefinition component) {
         return "按 rollback_order 逆序回滚；恢复上一版配置快照，清理本次治理演练数据，核心业务数据保持不动。";
+    }
+
+    private String defaultCodeSummary(ComponentDefinition component) {
+        if ("APP".equals(component.getComponentType()) || "WEB".equals(component.getComponentType())) {
+            return "填写代码改动大纲：涉及模块、接口、配置、数据库兼容性、前后端联动点。";
+        }
+        return "非代码上线项；如有脚本或配置生成代码，也要写清楚影响范围。";
+    }
+
+    private String defaultRiskAnalysis(ComponentDefinition component) {
+        return "风险分析：是否影响课程模块/用户模块、是否有数据迁移、是否可灰度、是否可快速回滚。";
+    }
+
+    private String defaultBugAnalysis(ComponentDefinition component) {
+        return "疑似 bug 分析：空值/并发/兼容性/索引/缓存/消息重复/配置拼写/前后端字段不一致。";
+    }
+
+    private String defaultVerificationCommands(ComponentDefinition component) {
+        return "dry-run 命令：填写只读检查命令\n健康检查：填写 curl/SQL/redis-cli/kafka/es/nacos 检查命令\n回滚验证：填写回滚后检查命令";
     }
 
     private String defaultTestPlan(ComponentDefinition component) {
@@ -972,7 +1224,7 @@ public class ReleaseChangeServiceImpl implements com.juege.oshrelease.service.Re
                 + component.getComponentName() + " 只保留统计结果，不保存敏感明细。";
     }
 
-    private String functionDetail(List<ReleaseNode> nodes) {
+    private String functionDetail(Long changeId, List<ReleaseNode> nodes) {
         StringBuilder builder = new StringBuilder();
         builder.append("{\"checks\":[");
         for (int i = 0; i < nodes.size(); i++) {
@@ -983,24 +1235,49 @@ public class ReleaseChangeServiceImpl implements com.juege.oshrelease.service.Re
             builder.append("{\"component\":\"").append(json(node.getComponentKey()))
                     .append("\",\"nodeOrder\":").append(node.getNodeOrder())
                     .append(",\"host\":\"").append(json(node.getHostName()))
-                    .append("\",\"status\":\"passed\",\"scope\":\"green-first-dry-run\"}");
+                    .append("\",\"status\":\"passed\",\"scope\":\"green-first-dry-run\"");
+            List<ReleaseChangeItem> items = findItemsByNode(changeId, node);
+            if (!items.isEmpty()) {
+                ReleaseChangeItem item = items.get(0);
+                builder.append(",\"itemType\":\"").append(json(item.getItemType()))
+                        .append("\",\"title\":\"").append(json(item.getTitle()))
+                        .append("\",\"verificationCommands\":\"").append(json(limit(item.getVerificationCommands(), 240)))
+                        .append("\"");
+            }
+            builder.append("}");
         }
         builder.append("],\"prodWrite\":\"blocked\",\"manualVerifyRequired\":true}");
         return builder.toString();
     }
 
-    private String dataDetail() {
-        return "{\"tables\":["
-                + "{\"module\":\"course\",\"before\":1200,\"after\":1200,\"added\":0,\"removed\":0,\"changed\":0},"
-                + "{\"module\":\"user\",\"before\":8600,\"after\":8600,\"added\":0,\"removed\":0,\"changed\":0},"
-                + "{\"module\":\"release_governance\",\"before\":12,\"after\":24,\"added\":12,\"removed\":0,\"changed\":0}"
-                + "],\"redis\":{\"beforeKeys\":430,\"afterKeys\":430,\"changedPrefixes\":[]},"
-                + "\"mysql\":{\"courseChanged\":0,\"userChanged\":0},"
-                + "\"kafka\":{\"topicsChanged\":0,\"lagDelta\":0},"
-                + "\"elasticsearch\":{\"indexAliasChanged\":0,\"documentDelta\":0},"
-                + "\"hbase\":{\"tableDelta\":0,\"rowDelta\":0},"
-                + "\"nacos\":{\"configDelta\":\"governance-only\"},"
-                + "\"ai\":\"差异只出现在治理演练数据，和上线内容一致\"}";
+    private String dataDetail(List<ReleaseChangeItem> changeItems) {
+        StringBuilder builder = new StringBuilder();
+        builder.append("{\"tables\":[")
+                .append("{\"module\":\"course\",\"before\":1200,\"after\":1200,\"added\":0,\"removed\":0,\"changed\":0},")
+                .append("{\"module\":\"user\",\"before\":8600,\"after\":8600,\"added\":0,\"removed\":0,\"changed\":0},")
+                .append("{\"module\":\"release_governance\",\"before\":12,\"after\":24,\"added\":12,\"removed\":0,\"changed\":0}")
+                .append("],\"redis\":{\"beforeKeys\":430,\"afterKeys\":430,\"changedPrefixes\":[]},")
+                .append("\"mysql\":{\"courseChanged\":0,\"userChanged\":0},")
+                .append("\"kafka\":{\"topicsChanged\":0,\"lagDelta\":0},")
+                .append("\"elasticsearch\":{\"indexAliasChanged\":0,\"documentDelta\":0},")
+                .append("\"hbase\":{\"tableDelta\":0,\"rowDelta\":0},")
+                .append("\"nacos\":{\"configDelta\":\"governance-only\"},")
+                .append("\"payloads\":[");
+        for (int i = 0; i < changeItems.size(); i++) {
+            ReleaseChangeItem item = changeItems.get(i);
+            if (i > 0) {
+                builder.append(",");
+            }
+            builder.append("{\"itemOrder\":").append(item.getItemOrder())
+                    .append(",\"component\":\"").append(json(item.getComponentKey()))
+                    .append("\",\"itemType\":\"").append(json(item.getItemType()))
+                    .append("\",\"payloadPath\":\"").append(json(item.getPayloadPath()))
+                    .append("\",\"risk\":\"").append(json(limit(item.getRiskAnalysis(), 240)))
+                    .append("\",\"verification\":\"").append(json(limit(item.getVerificationCommands(), 240)))
+                    .append("\"}");
+        }
+        builder.append("],\"ai\":\"差异只出现在治理演练数据，和上线内容一致\"}");
+        return builder.toString();
     }
 
     private String specDetail(List<ReleaseChangeItem> changeItems) {
@@ -1012,8 +1289,14 @@ public class ReleaseChangeServiceImpl implements com.juege.oshrelease.service.Re
                 builder.append(",");
             }
             builder.append("{\"component\":\"").append(json(item.getComponentKey()))
+                    .append("\",\"itemType\":\"").append(json(item.getItemType()))
                     .append("\",\"specStatus\":\"").append(json(item.getSpecStatus()))
-                    .append("\",\"hasIncrementalPlan\":").append(!isBlank(item.getIncrementalPlan()))
+                    .append("\",\"hasExecutionContent\":").append(!isBlank(item.getExecutionContent()))
+                    .append(",\"hasRollbackContent\":").append(!isBlank(item.getRollbackContent()))
+                    .append(",\"hasRiskAnalysis\":").append(!isBlank(item.getRiskAnalysis()))
+                    .append(",\"hasBugAnalysis\":").append(!isBlank(item.getBugAnalysis()))
+                    .append(",\"hasVerificationCommands\":").append(!isBlank(item.getVerificationCommands()))
+                    .append(",\"hasIncrementalPlan\":").append(!isBlank(item.getIncrementalPlan()))
                     .append(",\"hasRollbackPlan\":").append(!isBlank(item.getRollbackPlan()))
                     .append(",\"hasTestPlan\":").append(!isBlank(item.getTestPlan()))
                     .append(",\"hasDataProbePlan\":").append(!isBlank(item.getDataProbePlan()))
@@ -1081,6 +1364,19 @@ public class ReleaseChangeServiceImpl implements com.juege.oshrelease.service.Re
     }
 
     private String json(String value) {
-        return defaultText(value, "").replace("\\", "\\\\").replace("\"", "\\\"");
+        return defaultText(value, "")
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t");
+    }
+
+    private String limit(String value, int maxLength) {
+        String text = defaultText(value, "");
+        if (text.length() <= maxLength) {
+            return text;
+        }
+        return text.substring(0, maxLength) + "...";
     }
 }

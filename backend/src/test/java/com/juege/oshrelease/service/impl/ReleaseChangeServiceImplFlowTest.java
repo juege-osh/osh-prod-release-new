@@ -4,6 +4,7 @@ import com.juege.oshrelease.common.ChangeStatus;
 import com.juege.oshrelease.common.ReleaseType;
 import com.juege.oshrelease.dto.ReleaseChangeCreateRequest;
 import com.juege.oshrelease.dto.ReleaseChangeDetailDTO;
+import com.juege.oshrelease.dto.ReleaseChangeItemCreateRequest;
 import com.juege.oshrelease.dto.ReleaseChangeItemUpdateRequest;
 import com.juege.oshrelease.dto.ReleaseChangeOperationRequest;
 import com.juege.oshrelease.dto.ReviewerTestEvidenceRequest;
@@ -73,6 +74,37 @@ class ReleaseChangeServiceImplFlowTest {
         assertNotNull(created.changeCode);
         assertEquals(2, created.nodes.size());
         assertEquals(2, created.items.size());
+        assertEquals("node-mysql-1", created.nodes.get(0).nodeKey);
+
+        ReleaseChangeItemCreateRequest sqlItem = new ReleaseChangeItemCreateRequest();
+        sqlItem.itemType = "SQL";
+        sqlItem.componentKey = "mysql";
+        sqlItem.title = "给订单表补状态字段";
+        sqlItem.payloadPath = "mysql/release/20260708/add-order-status.sql";
+        sqlItem.changeContent = "新增订单状态字段，不改课程和用户模块。";
+        sqlItem.executionContent = "alter table order_info add column status varchar(32) default 'CREATED';";
+        sqlItem.rollbackContent = "alter table order_info drop column status;";
+        sqlItem.incrementalPlan = "先备份表结构，再在绿环境 dry-run。";
+        sqlItem.rollbackPlan = "回滚时先确认应用已退回旧版本，再 drop 字段。";
+        sqlItem.codeChangeSummary = "后端读取 status 字段，老数据默认 CREATED。";
+        sqlItem.riskAnalysis = "风险在订单查询兼容性；课程和用户模块不受影响。";
+        sqlItem.bugAnalysis = "注意默认值、老版本代码读写兼容和索引影响。";
+        sqlItem.verificationCommands = "select count(*) from order_info where status is null;";
+        sqlItem.testPlan = "测试订单列表、订单详情和回滚 SQL。";
+        sqlItem.dataProbePlan = "对比 order_info 行数；课程和用户表变化必须为 0。";
+        ReleaseChangeDetailDTO afterSqlItem = service.createItem(created.id, sqlItem);
+        assertEquals(3, afterSqlItem.items.size());
+        assertEquals("SQL", afterSqlItem.items.get(2).itemType);
+        assertTrue(afterSqlItem.items.get(2).executionContent.contains("alter table"));
+        assertTrue(afterSqlItem.items.get(2).bugAnalysis.contains("兼容"));
+        assertEquals(3, afterSqlItem.nodes.size());
+        assertEquals("node-mysql-3", afterSqlItem.nodes.get(2).nodeKey);
+
+        ReleaseChangeItemUpdateRequest sqlUpdate = sqlItemUpdateRequest();
+        ReleaseChangeDetailDTO afterSqlUpdate = service.updateItem(created.id, afterSqlItem.items.get(2).id, sqlUpdate);
+        assertEquals("MYSQL", afterSqlUpdate.nodes.get(0).componentName);
+        assertEquals("订单状态字段 SQL 上线", afterSqlUpdate.nodes.get(2).componentName);
+        assertTrue(afterSqlUpdate.nodes.get(2).detailJson.contains("idx_order_info_status"));
 
         service.submit(created.id);
 
@@ -116,6 +148,8 @@ class ReleaseChangeServiceImplFlowTest {
         ensureReviewerEvidence(service, created.id, created.items.get(0).id, "reviewer_b", "评审 B", "prod-green", "mysql B");
         ensureReviewerEvidence(service, created.id, created.items.get(1).id, "reviewer_a", "评审 A", "test", "redis A");
         ensureReviewerEvidence(service, created.id, created.items.get(1).id, "reviewer_b", "评审 B", "prod-green", "redis B");
+        ensureReviewerEvidence(service, created.id, afterSqlItem.items.get(2).id, "reviewer_a", "评审 A", "test", "sql A");
+        ensureReviewerEvidence(service, created.id, afterSqlItem.items.get(2).id, "reviewer_b", "评审 B", "prod-green", "sql B");
 
         service.validateSpecs(created.id);
         ReleaseChangeDetailDTO function = service.functionTest(created.id);
@@ -299,6 +333,27 @@ class ReleaseChangeServiceImplFlowTest {
         request.rollbackPlan = "按顺序回滚";
         request.testPlan = "测试通过";
         request.dataProbePlan = "数据摘要通过";
+        return request;
+    }
+
+    private ReleaseChangeItemUpdateRequest sqlItemUpdateRequest() {
+        ReleaseChangeItemUpdateRequest request = new ReleaseChangeItemUpdateRequest();
+        request.ownerUsername = "ops";
+        request.ownerDisplayName = "运维同学";
+        request.title = "订单状态字段 SQL 上线";
+        request.itemType = "SQL";
+        request.payloadPath = "mysql/release/20260708/add-order-status-v2.sql";
+        request.changeContent = "新增订单状态索引，不改课程和用户模块。";
+        request.executionContent = "create index idx_order_info_status on order_info(status);";
+        request.incrementalPlan = "先 explain，再绿环境 dry-run。";
+        request.rollbackContent = "drop index idx_order_info_status;";
+        request.rollbackPlan = "先确认查询已回退，再删除索引。";
+        request.codeChangeSummary = "非代码上线项；后端仅使用已有 status 字段。";
+        request.riskAnalysis = "风险在索引创建期间锁表；课程和用户模块不受影响。";
+        request.bugAnalysis = "注意重复索引、锁等待、低版本数据库语法差异。";
+        request.verificationCommands = "show index from order_info where Key_name = 'idx_order_info_status';";
+        request.testPlan = "验证订单列表查询和索引回滚。";
+        request.dataProbePlan = "对比 order_info 行数；课程和用户表变化必须为 0。";
         return request;
     }
 

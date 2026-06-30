@@ -275,7 +275,7 @@ public class BootstrapServiceImpl implements BootstrapService {
             }
             ReleaseNode node = new ReleaseNode();
             node.setChangeId(change.getId());
-            node.setNodeKey("node-" + component.getComponentKey());
+            node.setNodeKey("node-" + component.getComponentKey() + "-" + order);
             node.setComponentKey(component.getComponentKey());
             node.setComponentName(component.getComponentName());
             node.setNodeType(component.getComponentType());
@@ -316,9 +316,17 @@ public class BootstrapServiceImpl implements BootstrapService {
             item.setOwnerUsername("ops");
             item.setOwnerDisplayName("运维同学");
             item.setTitle(component.getComponentName() + " 增量上线演练");
+            item.setItemType(defaultItemType(component));
+            item.setPayloadPath(component.getDeployPath());
             item.setChangeContent(component.getComponentName() + " 在绿环境做增量上线演练，不改课程和用户业务数据。");
+            item.setExecutionContent(defaultExecutionContent(component));
             item.setIncrementalPlan("先 dry-run，再按节点发布绿环境；检查配置目录 " + component.getConfigDir() + " 和部署目录 " + component.getDeployPath() + "。");
+            item.setRollbackContent(defaultRollbackContent(component));
             item.setRollbackPlan("按 rollback_order 逆序恢复上一版配置和治理演练数据。");
+            item.setCodeChangeSummary(defaultCodeSummary(component));
+            item.setRiskAnalysis("风险分析：只做绿环境演练；真实生产执行前必须评估课程模块、用户模块和回滚窗口。");
+            item.setBugAnalysis("疑似 bug 分析：重点检查配置拼写、脚本幂等、缓存一致性、消息重复和前后端字段兼容。");
+            item.setVerificationCommands("dry-run：填写只读检查命令；健康检查：填写组件连通命令；回滚验证：填写恢复后检查命令。");
             item.setTestPlan("两位评审分别验证健康检查、接口/组件连通、回滚口径和异常处理。");
             item.setDataProbePlan("只采集数量摘要；课程模块和用户模块 added/removed/changed 必须为 0。");
             item.setSpecStatus("PASSED");
@@ -328,6 +336,55 @@ public class BootstrapServiceImpl implements BootstrapService {
             item.setJuegeConfirmed(true);
             releaseChangeItemRepository.save(item);
         }
+    }
+
+    private String defaultItemType(ComponentDefinition component) {
+        if ("DATABASE".equals(component.getComponentType())) {
+            return "SQL";
+        }
+        if ("CONFIG".equals(component.getComponentType()) || "GATEWAY".equals(component.getComponentType())
+                || "ORCHESTRATION".equals(component.getComponentType())) {
+            return "CONFIG";
+        }
+        if ("APP".equals(component.getComponentType()) || "WEB".equals(component.getComponentType())) {
+            return "CODE";
+        }
+        return "COMPONENT";
+    }
+
+    private String defaultExecutionContent(ComponentDefinition component) {
+        if ("DATABASE".equals(component.getComponentType())) {
+            return "-- 粘贴本次要上线的 SQL；必须带 WHERE、影响行数预估、备份方案和幂等说明。";
+        }
+        if ("CONFIG".equals(component.getComponentType()) || "GATEWAY".equals(component.getComponentType())
+                || "ORCHESTRATION".equals(component.getComponentType())) {
+            return "# 粘贴配置 diff、目标文件路径和校验命令。";
+        }
+        if ("APP".equals(component.getComponentType()) || "WEB".equals(component.getComponentType())) {
+            return "分支：release/20260708\n提交范围：填写 commit range\n构建产物：填写 jar/镜像/静态资源路径";
+        }
+        return "填写本组件真实增量执行内容。";
+    }
+
+    private String defaultRollbackContent(ComponentDefinition component) {
+        if ("DATABASE".equals(component.getComponentType())) {
+            return "-- 粘贴 SQL 回滚语句；必须说明备份表、恢复条件和影响行数。";
+        }
+        if ("CONFIG".equals(component.getComponentType()) || "GATEWAY".equals(component.getComponentType())
+                || "ORCHESTRATION".equals(component.getComponentType())) {
+            return "# 粘贴回滚配置 diff 或上一版配置路径。";
+        }
+        if ("APP".equals(component.getComponentType()) || "WEB".equals(component.getComponentType())) {
+            return "回滚版本：填写上一版 commit/镜像/包路径\n回滚命令：填写 dry-run 后的安全命令";
+        }
+        return "填写本组件真实回滚内容。";
+    }
+
+    private String defaultCodeSummary(ComponentDefinition component) {
+        if ("APP".equals(component.getComponentType()) || "WEB".equals(component.getComponentType())) {
+            return "代码改动大纲：填写模块、接口、配置、数据库兼容性、前后端联动点。";
+        }
+        return "非代码上线项；如脚本或配置会影响代码路径，也要写清楚。";
     }
 
     private void ensureDemoReviews(ReleaseChange change) {

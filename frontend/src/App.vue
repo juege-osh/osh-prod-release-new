@@ -113,8 +113,18 @@
                 </div>
                 <span class="status">{{ selectedChange.status }}</span>
               </div>
+              <section class="payload-guide">
+                <article v-for="entry in payloadGuides" :key="entry.type">
+                  <strong>{{ entry.title }}</strong>
+                  <p>{{ entry.copy }}</p>
+                  <button @click="startNewItem(entry.type)">{{ entry.button }}</button>
+                </article>
+              </section>
               <div class="action-row">
                 <button @click="submitChange">提交</button>
+                <button class="primary" @click="startNewItem('SQL')">新增 SQL</button>
+                <button @click="startNewItem('CONFIG')">新增配置</button>
+                <button @click="startNewItem('CODE')">新增代码</button>
                 <button @click="recordDemo">演示确认</button>
                 <button @click="approveAs('reviewer_a', '评审 A')">评审 A 通过</button>
                 <button @click="approveAs('reviewer_b', '评审 B')">评审 B 通过</button>
@@ -139,6 +149,41 @@
               <NodeTable v-if="viewMode === 'table'" :nodes="selectedChange.nodes" :items="selectedChange.items" @edit-item="openItemEditor" />
               <NodeTree v-if="viewMode === 'tree'" :nodes="selectedChange.nodes" :items="selectedChange.items" />
               <NodeGraph v-if="viewMode === 'graph'" :nodes="selectedChange.nodes" :items="selectedChange.items" />
+              <form v-if="creatingItem" class="item-editor payload-editor" @submit.prevent="createItem">
+                <div class="section-head">
+                  <h4>新增上线项：{{ itemTypeName(itemForm.itemType) }}</h4>
+                  <button type="button" class="ghost" @click="creatingItem = false">收起</button>
+                </div>
+                <div class="form-grid">
+                  <label>
+                    类型
+                    <select v-model="itemForm.itemType" @change="applyItemTypeDefaults">
+                      <option value="SQL">SQL</option>
+                      <option value="CONFIG">配置</option>
+                      <option value="CODE">代码</option>
+                      <option value="COMPONENT">组件</option>
+                    </select>
+                  </label>
+                  <label>
+                    组件
+                    <select v-model="itemForm.componentKey">
+                      <option v-for="component in components" :key="component.componentKey" :value="component.componentKey">
+                        {{ component.componentName }}
+                      </option>
+                    </select>
+                  </label>
+                  <label>
+                    标题
+                    <input v-model="itemForm.title" />
+                  </label>
+                  <label>
+                    负责人
+                    <input v-model="itemForm.ownerDisplayName" />
+                  </label>
+                </div>
+                <PayloadFields v-model:item="itemForm" />
+                <button class="primary" type="submit">加入上线计划</button>
+              </form>
               <form v-if="editingItem" class="item-editor" @submit.prevent="saveItem">
                 <div class="section-head">
                   <h4>更新子 change：{{ editingItem.componentName }}</h4>
@@ -149,9 +194,23 @@
                   <input v-model="itemForm.ownerDisplayName" />
                 </label>
                 <label>
+                  上线类型
+                  <select v-model="itemForm.itemType">
+                    <option value="SQL">SQL</option>
+                    <option value="CONFIG">配置</option>
+                    <option value="CODE">代码</option>
+                    <option value="COMPONENT">组件</option>
+                  </select>
+                </label>
+                <label>
+                  载荷路径/文件/分支
+                  <input v-model="itemForm.payloadPath" />
+                </label>
+                <label>
                   上线内容
                   <textarea v-model="itemForm.changeContent" rows="3" />
                 </label>
+                <PayloadFields v-model:item="itemForm" />
                 <label>
                   增量计划
                   <textarea v-model="itemForm.incrementalPlan" rows="3" />
@@ -265,6 +324,7 @@ const selectedChange = ref(null)
 const releaseGate = ref(null)
 const viewMode = ref('table')
 const loginForm = ref({ username: 'juege', password: '' })
+const creatingItem = ref(false)
 const editingItem = ref(null)
 const itemForm = ref({})
 
@@ -279,6 +339,27 @@ const viewModes = [
   { key: 'table', label: '表格' },
   { key: 'tree', label: '树' },
   { key: 'graph', label: '图' }
+]
+
+const payloadGuides = [
+  {
+    type: 'SQL',
+    title: '上线几条 SQL',
+    copy: '粘贴执行 SQL、回滚 SQL、影响行数和验证 SQL。平台会生成独立 MySQL 节点。',
+    button: '新增 SQL'
+  },
+  {
+    type: 'CONFIG',
+    title: '更新组件配置',
+    copy: '填配置路径、diff、回滚配置和刷新命令。Nacos、Nginx、Compose 都按配置项走。',
+    button: '新增配置'
+  },
+  {
+    type: 'CODE',
+    title: '发布代码',
+    copy: '填分支、commit 范围、改动大纲、疑似 bug 和构建产物。先发绿系统。',
+    button: '新增代码'
+  }
 ]
 
 const currentTitle = computed(() => navItems.find((item) => item.key === page.value)?.label || '总览')
@@ -363,6 +444,31 @@ async function createChange() {
 
 async function submitChange() {
   await operate(`/changes/${selectedChange.value.id}/submit`, '已提交评审')
+}
+
+function startNewItem(itemType) {
+  creatingItem.value = true
+  editingItem.value = null
+  itemForm.value = defaultItemForm(itemType)
+}
+
+function applyItemTypeDefaults() {
+  const current = itemForm.value
+  const defaults = defaultItemForm(current.itemType)
+  itemForm.value = {
+    ...defaults,
+    ownerUsername: current.ownerUsername || defaults.ownerUsername,
+    ownerDisplayName: current.ownerDisplayName || defaults.ownerDisplayName
+  }
+}
+
+async function createItem() {
+  await run(async () => {
+    selectedChange.value = await post(`/changes/${selectedChange.value.id}/items`, itemForm.value)
+    creatingItem.value = false
+    await refreshAll()
+    notice.value = '上线项已加入计划'
+  })
 }
 
 async function approveAs(username, displayName) {
@@ -465,6 +571,7 @@ async function rollback() {
 }
 
 function openItemEditor(item) {
+  creatingItem.value = false
   editingItem.value = item
   itemForm.value = { ...item }
 }
@@ -475,6 +582,60 @@ async function saveItem() {
     ownerUsername: itemForm.value.ownerUsername || 'ops'
   })
   editingItem.value = null
+}
+
+function defaultItemForm(itemType) {
+  const normalized = itemType || 'SQL'
+  const componentKey = normalized === 'SQL' ? 'mysql' : normalized === 'CODE' ? 'java-backend' : 'nacos'
+  return {
+    itemType: normalized,
+    componentKey,
+    title: itemTypeName(normalized) + '上线项',
+    ownerUsername: 'ops',
+    ownerDisplayName: '运维同学',
+    payloadPath: normalized === 'CODE' ? 'release/20260708' : '/data/osh/config',
+    changeContent: '写清楚这次要上线什么、影响哪些模块、为什么要上。',
+    executionContent: defaultExecutionContent(normalized),
+    incrementalPlan: '先上绿环境，先 dry-run，再执行；每一步都要留下结果。',
+    rollbackContent: defaultRollbackContent(normalized),
+    rollbackPlan: '按节点逆序回滚；先恢复配置/数据/代码，再验证课程和用户模块没有异常。',
+    codeChangeSummary: normalized === 'CODE' ? '写代码改动大纲：模块、接口、配置、数据库兼容性、前后端联动点。' : '非代码上线项；如脚本或配置影响代码路径，也要写清楚。',
+    riskAnalysis: '写风险分析：是否影响课程/用户模块、是否有数据迁移、是否可灰度、是否可快速回滚。',
+    bugAnalysis: '写疑似 bug 分析：空值、并发、索引、缓存、消息重复、配置拼写、前后端字段不一致。',
+    verificationCommands: 'dry-run：\n健康检查：\n回滚验证：',
+    testPlan: '两位评审分别在测试环境和绿环境验证功能、数据影响和回滚口径。',
+    dataProbePlan: '采集上线前后数量摘要；课程模块和用户模块 added/removed/changed 必须为 0。'
+  }
+}
+
+function defaultExecutionContent(itemType) {
+  if (itemType === 'SQL') {
+    return '-- 粘贴要上线的 SQL\n-- 必须说明 WHERE、影响行数、幂等判断\n'
+  }
+  if (itemType === 'CONFIG') {
+    return '# 粘贴配置 diff 或目标配置片段\n'
+  }
+  if (itemType === 'CODE') {
+    return '分支：release/20260708\n提交范围：\n构建产物：\n'
+  }
+  return '填写组件增量执行内容。'
+}
+
+function defaultRollbackContent(itemType) {
+  if (itemType === 'SQL') {
+    return '-- 粘贴 SQL 回滚语句\n-- 必须说明备份表、恢复条件、影响行数\n'
+  }
+  if (itemType === 'CONFIG') {
+    return '# 粘贴回滚配置 diff 或上一版配置路径\n'
+  }
+  if (itemType === 'CODE') {
+    return '回滚版本：\n回滚命令：\n'
+  }
+  return '填写组件回滚内容。'
+}
+
+function itemTypeName(itemType) {
+  return { SQL: 'SQL', CONFIG: '配置', CODE: '代码', COMPONENT: '组件' }[itemType] || '组件'
 }
 
 async function operate(path, message, body) {
@@ -514,19 +675,26 @@ const NodeTable = {
   props: ['nodes', 'items'],
   emits: ['edit-item'],
   methods: {
-    findItem(componentKey) {
-      return (this.items || []).find((item) => item.componentKey === componentKey) || {}
+    findItem(node) {
+      return (this.items || []).find((item) => item.componentKey === node.componentKey && item.itemOrder === node.nodeOrder)
+        || (this.items || []).find((item) => item.componentKey === node.componentKey)
+        || {}
     }
   },
   render() {
     return h('table', { class: 'node-table' }, [
-      h('thead', [h('tr', ['顺序', '组件', '负责人', '规范', '双评审', '动作', '状态', '回滚顺序', '编辑'].map((text) => h('th', text)))]),
+      h('thead', [h('tr', ['顺序', '类型', '组件/上线项', '负责人', '载荷', '规范', '双评审', '动作', '状态', '回滚顺序', '编辑'].map((text) => h('th', text)))]),
       h('tbody', this.nodes.map((node) => {
-        const item = this.findItem(node.componentKey)
+        const item = this.findItem(node)
         return h('tr', [
         h('td', node.nodeOrder),
-        h('td', node.componentName),
+        h('td', item.itemType || node.nodeType),
+        h('td', [
+          h('strong', item.title || node.componentName),
+          h('small', { class: 'block-muted' }, node.componentName)
+        ]),
         h('td', item.ownerDisplayName || '-'),
+        h('td', item.payloadPath || '-'),
         h('td', item.specStatus || '-'),
         h('td', item.reviewerAConfirmed && item.reviewerBConfirmed ? '已齐' : '缺证据'),
         h('td', node.actionType),
@@ -539,11 +707,76 @@ const NodeTable = {
   }
 }
 
+const PayloadFields = {
+  props: ['item'],
+  emits: ['update:item'],
+  methods: {
+    update(key, value) {
+      this.$emit('update:item', { ...this.item, [key]: value })
+    }
+  },
+  render() {
+    const item = this.item || {}
+    return h('div', { class: 'payload-fields' }, [
+      h('label', [
+        h('span', item.itemType === 'SQL' ? 'SQL 执行内容' : item.itemType === 'CONFIG' ? '配置 diff/片段' : item.itemType === 'CODE' ? '代码上线内容' : '执行内容'),
+        h('textarea', {
+          rows: 6,
+          value: item.executionContent || '',
+          onInput: (event) => this.update('executionContent', event.target.value)
+        })
+      ]),
+      h('label', [
+        h('span', '回滚内容'),
+        h('textarea', {
+          rows: 5,
+          value: item.rollbackContent || '',
+          onInput: (event) => this.update('rollbackContent', event.target.value)
+        })
+      ]),
+      h('label', [
+        h('span', '代码改动大纲'),
+        h('textarea', {
+          rows: 4,
+          value: item.codeChangeSummary || '',
+          onInput: (event) => this.update('codeChangeSummary', event.target.value)
+        })
+      ]),
+      h('label', [
+        h('span', '风险分析'),
+        h('textarea', {
+          rows: 4,
+          value: item.riskAnalysis || '',
+          onInput: (event) => this.update('riskAnalysis', event.target.value)
+        })
+      ]),
+      h('label', [
+        h('span', '疑似 bug 分析'),
+        h('textarea', {
+          rows: 4,
+          value: item.bugAnalysis || '',
+          onInput: (event) => this.update('bugAnalysis', event.target.value)
+        })
+      ]),
+      h('label', [
+        h('span', '验证命令'),
+        h('textarea', {
+          rows: 4,
+          value: item.verificationCommands || '',
+          onInput: (event) => this.update('verificationCommands', event.target.value)
+        })
+      ])
+    ])
+  }
+}
+
 const NodeTree = {
   props: ['nodes', 'items'],
   render() {
     return h('div', { class: 'node-tree' }, this.nodes.map((node) => {
-      const item = (this.items || []).find((entry) => entry.componentKey === node.componentKey) || {}
+      const item = (this.items || []).find((entry) => entry.componentKey === node.componentKey && entry.itemOrder === node.nodeOrder)
+        || (this.items || []).find((entry) => entry.componentKey === node.componentKey)
+        || {}
       return h('div', { class: 'tree-line' }, [
       h('span', node.nodeOrder),
       h('strong', node.componentName),
@@ -557,7 +790,9 @@ const NodeGraph = {
   props: ['nodes', 'items'],
   render() {
     return h('div', { class: 'node-graph' }, this.nodes.map((node, index) => {
-      const item = (this.items || []).find((entry) => entry.componentKey === node.componentKey) || {}
+      const item = (this.items || []).find((entry) => entry.componentKey === node.componentKey && entry.itemOrder === node.nodeOrder)
+        || (this.items || []).find((entry) => entry.componentKey === node.componentKey)
+        || {}
       return h('div', { class: 'graph-node' }, [
       h('span', `#${index + 1}`),
       h('strong', node.componentName),

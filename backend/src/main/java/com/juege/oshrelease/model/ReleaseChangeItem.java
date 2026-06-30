@@ -35,14 +35,38 @@ public class ReleaseChangeItem extends BaseEntity {
     @Column(nullable = false, length = 160)
     private String title;
 
+    @Column(name = "item_type", nullable = false, length = 32)
+    private String itemType;
+
+    @Column(name = "payload_path", nullable = false, length = 512)
+    private String payloadPath;
+
     @Column(name = "change_content", nullable = false, columnDefinition = "text")
     private String changeContent;
+
+    @Column(name = "execution_content", nullable = false, columnDefinition = "text")
+    private String executionContent;
 
     @Column(name = "incremental_plan", nullable = false, columnDefinition = "text")
     private String incrementalPlan;
 
+    @Column(name = "rollback_content", nullable = false, columnDefinition = "text")
+    private String rollbackContent;
+
     @Column(name = "rollback_plan", nullable = false, columnDefinition = "text")
     private String rollbackPlan;
+
+    @Column(name = "code_change_summary", nullable = false, columnDefinition = "text")
+    private String codeChangeSummary;
+
+    @Column(name = "risk_analysis", nullable = false, columnDefinition = "text")
+    private String riskAnalysis;
+
+    @Column(name = "bug_analysis", nullable = false, columnDefinition = "text")
+    private String bugAnalysis;
+
+    @Column(name = "verification_commands", nullable = false, columnDefinition = "text")
+    private String verificationCommands;
 
     @Column(name = "test_plan", nullable = false, columnDefinition = "text")
     private String testPlan;
@@ -137,12 +161,36 @@ public class ReleaseChangeItem extends BaseEntity {
         this.title = title;
     }
 
+    public String getItemType() {
+        return itemType;
+    }
+
+    public void setItemType(String itemType) {
+        this.itemType = itemType;
+    }
+
+    public String getPayloadPath() {
+        return payloadPath;
+    }
+
+    public void setPayloadPath(String payloadPath) {
+        this.payloadPath = payloadPath;
+    }
+
     public String getChangeContent() {
         return changeContent;
     }
 
     public void setChangeContent(String changeContent) {
         this.changeContent = changeContent;
+    }
+
+    public String getExecutionContent() {
+        return executionContent;
+    }
+
+    public void setExecutionContent(String executionContent) {
+        this.executionContent = executionContent;
     }
 
     public String getIncrementalPlan() {
@@ -153,12 +201,52 @@ public class ReleaseChangeItem extends BaseEntity {
         this.incrementalPlan = incrementalPlan;
     }
 
+    public String getRollbackContent() {
+        return rollbackContent;
+    }
+
+    public void setRollbackContent(String rollbackContent) {
+        this.rollbackContent = rollbackContent;
+    }
+
     public String getRollbackPlan() {
         return rollbackPlan;
     }
 
     public void setRollbackPlan(String rollbackPlan) {
         this.rollbackPlan = rollbackPlan;
+    }
+
+    public String getCodeChangeSummary() {
+        return codeChangeSummary;
+    }
+
+    public void setCodeChangeSummary(String codeChangeSummary) {
+        this.codeChangeSummary = codeChangeSummary;
+    }
+
+    public String getRiskAnalysis() {
+        return riskAnalysis;
+    }
+
+    public void setRiskAnalysis(String riskAnalysis) {
+        this.riskAnalysis = riskAnalysis;
+    }
+
+    public String getBugAnalysis() {
+        return bugAnalysis;
+    }
+
+    public void setBugAnalysis(String bugAnalysis) {
+        this.bugAnalysis = bugAnalysis;
+    }
+
+    public String getVerificationCommands() {
+        return verificationCommands;
+    }
+
+    public void setVerificationCommands(String verificationCommands) {
+        this.verificationCommands = verificationCommands;
     }
 
     public String getTestPlan() {

@@ -3,6 +3,7 @@ package com.juege.oshrelease.controller;
 import com.juege.oshrelease.common.ApiResponse;
 import com.juege.oshrelease.dto.ReleaseChangeCreateRequest;
 import com.juege.oshrelease.dto.ReleaseChangeDetailDTO;
+import com.juege.oshrelease.dto.ReleaseChangeItemCreateRequest;
 import com.juege.oshrelease.dto.ReleaseChangeItemUpdateRequest;
 import com.juege.oshrelease.dto.ReleaseChangeListItemDTO;
 import com.juege.oshrelease.dto.ReleaseChangeOperationRequest;
@@ -63,6 +64,12 @@ public class ReleaseChangeController {
     @PostMapping("/{id}/demo")
     public ApiResponse<ReleaseChangeDetailDTO> demo(@PathVariable Long id, @RequestBody ReleaseChangeOperationRequest request) {
         return ApiResponse.ok(releaseChangeService.demo(id, request));
+    }
+
+    @PostMapping("/{id}/items")
+    public ApiResponse<ReleaseChangeDetailDTO> createItem(@PathVariable Long id,
+                                                          @RequestBody ReleaseChangeItemCreateRequest request) {
+        return ApiResponse.ok(releaseChangeService.createItem(id, request));
     }
 
     @PostMapping("/{id}/items/{itemId}")
