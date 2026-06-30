@@ -1,5 +1,7 @@
 FROM node:22-alpine AS build
 WORKDIR /workspace
+ARG VITE_API_BASE=/api
+ENV VITE_API_BASE=${VITE_API_BASE}
 COPY frontend/package.json ./package.json
 RUN npm install
 COPY frontend/ ./

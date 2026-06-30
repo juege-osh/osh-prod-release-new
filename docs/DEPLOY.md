@@ -19,6 +19,59 @@ docker compose up -d --build
 - Web：`http://服务器IP:18081`
 - Health：`http://服务器IP:18080/actuator/health`
 
+## 浏览器连通性检查
+
+2026-06-30 用内置浏览器检查生产 IP `149.88.92.159`：
+
+- `https://osh.lol/` 正常打开，当前是 OSH 主站首页。
+- `http://149.88.92.159/` 能打开，但页面为空。
+- `https://149.88.92.159/` 因证书域名不匹配被浏览器拦截。
+- `http://149.88.92.159:18081/` 连接被拒绝，说明治理台前端还没在生产 IP 监听。
+- `http://149.88.92.159:18080/actuator/health` 连接被拒绝，说明治理台后端还没在生产 IP 监听。
+
+结论：生产主站正常，治理台还没有部署到生产可访问端口。
+
+## 生产反代建议
+
+不要把治理台挂到 `https://osh.lol/` 根路径，避免覆盖现有主站。
+
+推荐挂到独立路径：
+
+- `https://osh.lol/release-console/`
+- API 路径：`https://osh.lol/release-console-api/`
+
+Nginx 示例：
+
+```nginx
+location /release-console/ {
+  proxy_pass http://127.0.0.1:18081/;
+  proxy_set_header Host $host;
+  proxy_set_header X-Real-IP $remote_addr;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  proxy_set_header X-Forwarded-Proto $scheme;
+}
+
+location /release-console-api/ {
+  proxy_pass http://127.0.0.1:18080/api/;
+  proxy_set_header Host $host;
+  proxy_set_header X-Real-IP $remote_addr;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+如果前端挂在 `/release-console/`，构建时建议设置：
+
+```bash
+export VITE_API_BASE=/release-console-api
+```
+
+再执行：
+
+```bash
+docker compose up -d --build
+```
+
 ## 上线流程
 
 1. 新建变更单，选择组件。

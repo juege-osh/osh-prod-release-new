@@ -38,6 +38,8 @@ docker compose up -d --build
 - 前端：http://localhost:18081
 - 后端：http://localhost:18080/actuator/health
 
+生产建议挂独立路径，不要覆盖 `https://osh.lol/` 主站首页。推荐路径：`/release-console/`，详细反代配置见 [DEPLOY.md](docs/DEPLOY.md)。
+
 ## 安全边界
 
 - 生产环境写操作默认禁止。
