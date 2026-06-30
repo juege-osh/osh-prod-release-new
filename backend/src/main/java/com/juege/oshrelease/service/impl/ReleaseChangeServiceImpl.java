@@ -18,6 +18,7 @@ import com.juege.oshrelease.dto.ReviewerTestEvidenceRequest;
 import com.juege.oshrelease.dto.ReviewRecordDTO;
 import com.juege.oshrelease.dto.TestReportDTO;
 import com.juege.oshrelease.model.ComponentDefinition;
+import com.juege.oshrelease.model.DemoRecord;
 import com.juege.oshrelease.model.Environment;
 import com.juege.oshrelease.model.ReleaseChange;
 import com.juege.oshrelease.model.ReleaseChangeItem;
@@ -27,6 +28,7 @@ import com.juege.oshrelease.model.ReviewerTestEvidence;
 import com.juege.oshrelease.model.ReviewRecord;
 import com.juege.oshrelease.model.TestReport;
 import com.juege.oshrelease.repo.ComponentRepository;
+import com.juege.oshrelease.repo.DemoRecordRepository;
 import com.juege.oshrelease.repo.EnvironmentRepository;
 import com.juege.oshrelease.repo.ReleaseChangeItemRepository;
 import com.juege.oshrelease.repo.ReleaseChangeRepository;
@@ -44,6 +46,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -51,12 +54,14 @@ import org.springframework.transaction.annotation.Transactional;
 public class ReleaseChangeServiceImpl implements com.juege.oshrelease.service.ReleaseChangeService {
 
     private static final DateTimeFormatter CODE_TIME = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
+    private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private final ReleaseChangeRepository releaseChangeRepository;
     private final ReleaseNodeRepository releaseNodeRepository;
     private final ReleaseChangeItemRepository releaseChangeItemRepository;
     private final ReviewRecordRepository reviewRecordRepository;
     private final ReviewerTestEvidenceRepository reviewerTestEvidenceRepository;
+    private final DemoRecordRepository demoRecordRepository;
     private final TestReportRepository testReportRepository;
     private final ReleaseOperationRecordRepository releaseOperationRecordRepository;
     private final ComponentRepository componentRepository;
@@ -67,6 +72,7 @@ public class ReleaseChangeServiceImpl implements com.juege.oshrelease.service.Re
                                     ReleaseChangeItemRepository releaseChangeItemRepository,
                                     ReviewRecordRepository reviewRecordRepository,
                                     ReviewerTestEvidenceRepository reviewerTestEvidenceRepository,
+                                    DemoRecordRepository demoRecordRepository,
                                     TestReportRepository testReportRepository,
                                     ReleaseOperationRecordRepository releaseOperationRecordRepository,
                                     ComponentRepository componentRepository,
@@ -76,6 +82,7 @@ public class ReleaseChangeServiceImpl implements com.juege.oshrelease.service.Re
         this.releaseChangeItemRepository = releaseChangeItemRepository;
         this.reviewRecordRepository = reviewRecordRepository;
         this.reviewerTestEvidenceRepository = reviewerTestEvidenceRepository;
+        this.demoRecordRepository = demoRecordRepository;
         this.testReportRepository = testReportRepository;
         this.releaseOperationRecordRepository = releaseOperationRecordRepository;
         this.componentRepository = componentRepository;
@@ -116,7 +123,8 @@ public class ReleaseChangeServiceImpl implements com.juege.oshrelease.service.Re
         Environment env = environmentRepository.findByEnvCode(request.targetEnvCode)
                 .orElseThrow(() -> new BusinessException("目标环境不存在"));
         ReleaseChange change = new ReleaseChange();
-        change.setChangeCode("CHG-" + LocalDateTime.now().format(CODE_TIME));
+        change.setChangeCode("CHG-" + LocalDateTime.now().format(CODE_TIME)
+                + "-" + ThreadLocalRandom.current().nextInt(1000, 10000));
         change.setTitle(request.title.trim());
         change.setProjectBranch(defaultText(request.projectBranch, "release/20260708"));
         change.setReleaseType(request.releaseType == null ? ReleaseType.NORMAL : request.releaseType);
@@ -206,12 +214,24 @@ public class ReleaseChangeServiceImpl implements com.juege.oshrelease.service.Re
     public ReleaseChangeDetailDTO demo(Long id, ReleaseChangeOperationRequest request) {
         ReleaseChange change = getChange(id);
         validateOperationUser(request);
+        String actorUsername = operationActorUsername(request, change.getDeveloperUsername());
+        String actorDisplayName = operationActorDisplayName(request, change.getDeveloperDisplayName());
+        String reviewerUsername = defaultText(request.reviewerUsername, "reviewer_b");
+        String reviewerDisplayName = defaultText(request.reviewerDisplayName, reviewerUsername);
+        String demoComment = defaultText(request.comment,
+                actorDisplayName + " 已向 " + reviewerDisplayName + " 演示了本次上线内容。");
         change.setDemoConfirmed(true);
         change.setCurrentStep("演示已确认，等待审批完成");
-        change.setFinalMessage(defaultText(request.comment, "开发人已向另一位评审演示变更内容。"));
+        change.setFinalMessage(demoComment);
+        DemoRecord demoRecord = new DemoRecord();
+        demoRecord.setChangeId(id);
+        demoRecord.setDeveloperUsername(actorUsername);
+        demoRecord.setReviewerUsername(reviewerUsername);
+        demoRecord.setContent(demoComment);
+        demoRecordRepository.save(demoRecord);
         addOperation(change, "DEMO_CONFIRM", "RECORDED", change.getTargetEnvCode(), change.getTargetColor(),
-                request.reviewerUsername, defaultText(request.reviewerDisplayName, request.reviewerUsername), true,
-                "已记录开发人向另一位评审演示。", "{\"demoConfirmed\":true}");
+                actorUsername, actorDisplayName, true,
+                "已记录开发人向另一位评审演示。", "{\"demoConfirmed\":true,\"reviewer\":\"" + json(reviewerUsername) + "\"}");
         releaseChangeRepository.save(change);
         return toDetail(change);
     }
@@ -377,9 +397,13 @@ public class ReleaseChangeServiceImpl implements com.juege.oshrelease.service.Re
     @Transactional
     public ReleaseChangeDetailDTO switchGreen(Long id) {
         ReleaseChange change = getChange(id);
+        if (change.getStatus() != ChangeStatus.APPROVED && change.getStatus() != ChangeStatus.TESTING) {
+            throw new BusinessException("必须审批通过后才能切绿");
+        }
         if (!hasPassedReport(id, "FUNCTION") || !hasPassedReport(id, "DATA")) {
             throw new BusinessException("必须先通过功能测试和数据量对比");
         }
+        ensureReviewerEvidence(change);
         Environment env = environmentRepository.findByEnvCode(change.getTargetEnvCode())
                 .orElseThrow(() -> new BusinessException("目标环境不存在"));
         if (!env.isSupportsBlueGreen()) {
@@ -403,6 +427,11 @@ public class ReleaseChangeServiceImpl implements com.juege.oshrelease.service.Re
     @Transactional
     public ReleaseChangeDetailDTO switchBlue(Long id) {
         ReleaseChange change = getChange(id);
+        if (change.getStatus() != ChangeStatus.SWITCHED
+                && change.getStatus() != ChangeStatus.VERIFIED
+                && change.getStatus() != ChangeStatus.RELEASED) {
+            throw new BusinessException("必须先切绿后才能回蓝");
+        }
         Environment env = environmentRepository.findByEnvCode(change.getTargetEnvCode())
                 .orElseThrow(() -> new BusinessException("目标环境不存在"));
         env.setCurrentColor("blue");
@@ -681,7 +710,22 @@ public class ReleaseChangeServiceImpl implements com.juege.oshrelease.service.Re
 
     private ReleaseChangeDetailDTO toDetail(ReleaseChange change) {
         return ReleaseChangeMapper.toDetail(change, nodes(change.getId()), items(change.getId()),
-                reviews(change.getId()), evidences(change.getId()), testReports(change.getId()), operations(change.getId()));
+                reviews(change.getId()), evidences(change.getId()), demos(change.getId()),
+                testReports(change.getId()), operations(change.getId()));
+    }
+
+    private List<com.juege.oshrelease.dto.DemoRecordDTO> demos(Long id) {
+        List<com.juege.oshrelease.dto.DemoRecordDTO> result = new ArrayList<com.juege.oshrelease.dto.DemoRecordDTO>();
+        for (DemoRecord demoRecord : demoRecordRepository.findByChangeIdOrderByCreatedAtAsc(id)) {
+            com.juege.oshrelease.dto.DemoRecordDTO dto = new com.juege.oshrelease.dto.DemoRecordDTO();
+            dto.id = demoRecord.getId();
+            dto.developerUsername = demoRecord.getDeveloperUsername();
+            dto.reviewerUsername = demoRecord.getReviewerUsername();
+            dto.content = demoRecord.getContent();
+            dto.createdAt = demoRecord.getCreatedAt() == null ? "" : demoRecord.getCreatedAt().format(FORMATTER);
+            result.add(dto);
+        }
+        return result;
     }
 
     private void fillReviewerSlots(ReleaseChange change, String username) {

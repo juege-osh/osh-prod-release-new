@@ -7,6 +7,7 @@ import com.juege.oshrelease.dto.ReleaseNodeDTO;
 import com.juege.oshrelease.dto.ReleaseOperationRecordDTO;
 import com.juege.oshrelease.dto.ReviewerTestEvidenceDTO;
 import com.juege.oshrelease.dto.ReviewRecordDTO;
+import com.juege.oshrelease.dto.DemoRecordDTO;
 import com.juege.oshrelease.dto.TestReportDTO;
 import com.juege.oshrelease.model.ReleaseChange;
 import com.juege.oshrelease.model.ReleaseChangeItem;
@@ -50,6 +51,7 @@ final class ReleaseChangeMapper {
                                            List<ReleaseChangeItemDTO> items,
                                            List<ReviewRecordDTO> reviews,
                                            List<ReviewerTestEvidenceDTO> evidences,
+                                           List<DemoRecordDTO> demos,
                                            List<TestReportDTO> reports,
                                            List<ReleaseOperationRecordDTO> operations) {
         ReleaseChangeDetailDTO dto = new ReleaseChangeDetailDTO();
@@ -77,6 +79,7 @@ final class ReleaseChangeMapper {
         dto.items = items;
         dto.reviews = reviews;
         dto.evidences = evidences;
+        dto.demos = demos;
         dto.reports = reports;
         dto.operations = operations;
         return dto;

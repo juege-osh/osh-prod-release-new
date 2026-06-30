@@ -27,6 +27,7 @@ public class ReleaseChangeDetailDTO {
     public List<ReleaseChangeItemDTO> items;
     public List<ReviewRecordDTO> reviews;
     public List<ReviewerTestEvidenceDTO> evidences;
+    public List<DemoRecordDTO> demos;
     public List<TestReportDTO> reports;
     public List<ReleaseOperationRecordDTO> operations;
 }

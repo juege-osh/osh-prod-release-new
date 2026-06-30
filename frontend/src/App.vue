@@ -18,7 +18,7 @@
           <input v-model="loginForm.password" autocomplete="current-password" type="password" />
         </label>
         <button :disabled="loading">{{ loading ? '登录中...' : '进入治理台' }}</button>
-        <p class="hint">默认账号：juege / Juege@2026</p>
+        <p class="hint">默认账号：juege</p>
       </form>
     </section>
 
@@ -115,6 +115,7 @@
               </div>
               <div class="action-row">
                 <button @click="submitChange">提交</button>
+                <button @click="recordDemo">演示确认</button>
                 <button @click="approveAs('reviewer_a', '评审 A')">评审 A 通过</button>
                 <button @click="approveAs('reviewer_b', '评审 B')">评审 B 通过</button>
                 <button class="primary" @click="approveAs('juege', '觉哥')">觉哥确认</button>
@@ -183,6 +184,13 @@
                   </p>
                 </article>
                 <article>
+                  <h4>演示确认</h4>
+                  <p v-for="demo in selectedChange.demos || []" :key="demo.id">
+                    {{ demo.developerUsername }} → {{ demo.reviewerUsername }} · {{ demo.content }}
+                  </p>
+                  <p v-if="!(selectedChange.demos && selectedChange.demos.length)">还没有记录演示确认。</p>
+                </article>
+                <article>
                   <h4>测试报告</h4>
                   <p v-for="report in selectedChange.reports" :key="report.id">
                     {{ report.reportType }} · {{ report.summary }}
@@ -248,7 +256,7 @@ const components = ref([])
 const changes = ref([])
 const selectedChange = ref(null)
 const viewMode = ref('table')
-const loginForm = ref({ username: 'juege', password: 'Juege@2026' })
+const loginForm = ref({ username: 'juege', password: '' })
 const editingItem = ref(null)
 const itemForm = ref({})
 
@@ -323,8 +331,9 @@ async function createChange() {
     releaseType: 'NORMAL',
     targetEnvCode: 'prod',
     targetColor: 'green',
-    developerUsername: 'ops',
-    developerDisplayName: '运维同学',
+    developerUsername: 'reviewer_a',
+    developerDisplayName: '评审 A',
+    demoRequired: true,
     riskLevel: 'HIGH',
     summary: '先发绿环境，自动化测试后再切流，异常立即回蓝。',
     componentKeys,
@@ -345,6 +354,16 @@ async function approveAs(username, displayName) {
     reviewerDisplayName: displayName,
     passed: true,
     comment: `${displayName} 确认通过`
+  })
+}
+
+async function recordDemo() {
+  await operate(`/changes/${selectedChange.value.id}/demo`, '演示确认已记录', {
+    reviewerUsername: 'reviewer_b',
+    reviewerDisplayName: '评审 B',
+    actorUsername: selectedChange.value.developerUsername || 'reviewer_a',
+    actorDisplayName: selectedChange.value.developerDisplayName || '评审 A',
+    comment: `${selectedChange.value.developerDisplayName || '评审 A'} 已向评审 B 演示本次上线内容`
   })
 }
 

@@ -4,12 +4,16 @@
 
 它不复用主站业务库。默认只写自己的治理库，用来管理变更单、子 change、审批、评审测试证据、自动化测试报告、蓝绿切换记录和回滚记录。
 
+完整操作说明见 [docs/USAGE.md](docs/USAGE.md)。
+
 ## 默认账号
 
-- 觉哥：`juege / Juege@2026`
-- 评审 A：`reviewer_a / Review@2026`
-- 评审 B：`reviewer_b / Review@2026`
-- 运维：`ops / Ops@2026`
+- 觉哥：`juege`
+- 评审 A：`reviewer_a`
+- 评审 B：`reviewer_b`
+- 运维：`ops`
+
+密码写在后端种子数据里，文档里不重复放了。
 
 ## 本地运行
 
