@@ -18,7 +18,7 @@
           <input v-model="loginForm.password" autocomplete="current-password" type="password" />
         </label>
         <button :disabled="loading">{{ loading ? '登录中...' : '进入治理台' }}</button>
-        <p class="hint">默认账号：juege</p>
+        <p class="hint">默认账号：juege，密码不在这里写。</p>
       </form>
     </section>
 
