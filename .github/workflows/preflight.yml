@@ -1,0 +1,33 @@
+name: Release Preflight
+
+on:
+  push:
+    branches:
+      - release/20260708
+  pull_request:
+    branches:
+      - release/20260708
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "8"
+          cache: maven
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Run preflight
+        run: scripts/preflight.sh

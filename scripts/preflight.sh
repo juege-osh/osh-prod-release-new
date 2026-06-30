@@ -8,7 +8,13 @@ echo "[1/6] backend tests"
 mvn -q -pl backend test
 
 echo "[2/6] frontend build"
-(cd frontend && npm run build)
+(
+  cd frontend
+  if [ ! -d node_modules ]; then
+    npm ci
+  fi
+  npm run build
+)
 
 echo "[3/6] docker compose must reject missing secrets"
 if docker compose config >/tmp/osh-release-compose-missing.txt 2>&1; then
