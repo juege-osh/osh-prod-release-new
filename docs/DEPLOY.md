@@ -21,6 +21,7 @@ docker compose up -d --build
 启动后先跑 API 冒烟：
 
 ```bash
+scripts/preflight.sh
 OSH_RELEASE_API_BASE=http://127.0.0.1:18080/api \
 OSH_RELEASE_PASSWORD='治理台密码' \
 python3 scripts/smoke_release_flow.py
