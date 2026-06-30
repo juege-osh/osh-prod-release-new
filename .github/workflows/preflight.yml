@@ -31,3 +31,6 @@ jobs:
 
       - name: Run preflight
         run: scripts/preflight.sh
+
+      - name: Run local API smoke
+        run: scripts/local_smoke.sh
