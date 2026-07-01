@@ -119,7 +119,7 @@ textarea {
 
 .primary,
 .login-form button,
-.action-row button {
+.flow-actions button {
   padding: 12px 16px;
   border-radius: 999px;
   color: #fffaf0;
@@ -206,8 +206,8 @@ textarea {
 
 .topbar,
 .section-head,
-.action-row,
-.view-tabs {
+.view-tabs,
+.pane-head {
   display: flex;
   gap: 14px;
   align-items: center;
@@ -314,15 +314,95 @@ dd {
   background: rgba(33, 122, 84, 0.12);
 }
 
-.action-row {
-  justify-content: flex-start;
+.change-meta-strip {
   margin: 18px 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
-.component-workbench {
+.change-meta-strip span {
+  padding: 8px 12px;
+  border: 1px solid rgba(33, 122, 84, 0.18);
+  border-radius: 999px;
+  color: var(--ink);
+  background: rgba(225, 244, 231, 0.58);
+  font-weight: 800;
+}
+
+.change-tabs {
   margin: 18px 0;
+  padding: 8px;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: rgba(16, 32, 27, 0.05);
+}
+
+.change-tabs button {
+  min-height: 74px;
+  padding: 12px;
+  display: grid;
+  gap: 5px;
+  align-content: center;
+  border-radius: 16px;
+  color: var(--ink);
+  text-align: left;
+  background: transparent;
+}
+
+.change-tabs button.active {
+  color: #fffaf0;
+  background: var(--ink);
+  box-shadow: 0 10px 24px rgba(16, 32, 27, 0.16);
+}
+
+.change-tabs strong,
+.change-tabs small {
+  display: block;
+}
+
+.change-tabs small {
+  color: inherit;
+  opacity: 0.72;
+  line-height: 1.35;
+}
+
+.tab-pane {
+  display: grid;
+  gap: 18px;
+}
+
+.pane-head {
   padding: 18px;
-  border: 1px solid rgba(38, 95, 115, 0.22);
+  border: 1px solid rgba(38, 95, 115, 0.18);
+  border-radius: 22px;
+  background: rgba(255, 252, 242, 0.52);
+}
+
+.pane-head h4,
+.pane-head p,
+.compact-head h4,
+.compact-head p {
+  margin: 0;
+}
+
+.pane-head p,
+.compact-head p {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.action-groups {
+  display: grid;
+  gap: 18px;
+}
+
+.action-group-card {
+  padding: 18px;
+  border: 1px solid rgba(38, 95, 115, 0.2);
   border-radius: 24px;
   background: rgba(255, 252, 242, 0.54);
 }
@@ -331,19 +411,10 @@ dd {
   margin-bottom: 14px;
 }
 
-.compact-head h4,
-.compact-head p {
-  margin: 0;
-}
-
-.compact-head p {
-  color: var(--muted);
-}
-
 .action-catalog,
 .payload-guide {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
 }
 
@@ -387,12 +458,60 @@ dd {
   background: var(--green);
 }
 
-.action-row button {
+.flow-actions button {
   background: var(--blue);
 }
 
-.action-row .primary {
+.flow-actions .primary {
   background: var(--green);
+}
+
+.workflow-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.workflow-card {
+  min-height: 230px;
+  padding: 18px;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  border: 1px solid rgba(38, 95, 115, 0.2);
+  border-radius: 22px;
+  background: rgba(255, 252, 242, 0.62);
+}
+
+.workflow-card h4,
+.workflow-card p {
+  margin: 0;
+}
+
+.workflow-card p {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.danger-card {
+  border-color: rgba(182, 66, 50, 0.24);
+  background: rgba(255, 237, 226, 0.62);
+}
+
+.step-index {
+  width: fit-content;
+  padding: 6px 10px;
+  border-radius: 999px;
+  color: #fffaf0;
+  background: var(--ink);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.flow-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .danger-button {
@@ -541,6 +660,14 @@ dd {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
   margin-top: 18px;
+}
+
+.audit-grid {
+  margin-top: 0;
+}
+
+.empty-line {
+  color: var(--muted);
 }
 
 .item-editor {
@@ -725,7 +852,9 @@ pre {
   .component-grid,
   .report-grid,
   .action-catalog,
-  .payload-guide {
+  .payload-guide,
+  .change-tabs,
+  .workflow-grid {
     grid-template-columns: 1fr;
   }
 

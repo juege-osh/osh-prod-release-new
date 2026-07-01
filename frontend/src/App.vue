@@ -117,158 +117,287 @@
                 <span class="status">{{ selectedChange.status }}</span>
               </div>
 
-              <section class="component-workbench">
-                <div class="section-head compact-head">
+              <div class="change-meta-strip">
+                <span>上线项 {{ selectedChange.items?.length || 0 }}</span>
+                <span>节点 {{ selectedChange.nodes?.length || 0 }}</span>
+                <span>报告 {{ selectedChange.reports?.length || 0 }}</span>
+                <span>操作 {{ selectedChange.operations?.length || 0 }}</span>
+              </div>
+
+              <div class="change-tabs">
+                <button v-for="tab in changeTabs" :key="tab.key" :class="{ active: changeTab === tab.key }" @click="changeTab = tab.key">
+                  <strong>{{ tab.label }}</strong>
+                  <small>{{ tab.copy }}</small>
+                </button>
+              </div>
+
+              <section v-if="changeTab === 'items'" class="tab-pane">
+                <div class="pane-head">
                   <div>
-                    <h4>组件上线工作台</h4>
-                    <p>选具体动作，平台会生成独立上线项、节点、dry-run、验证和回滚记录。</p>
+                    <h4>上线项和节点</h4>
+                    <p>这里负责看节点、编辑子 change，并做单项分析、dry-run、执行、验证和回滚。</p>
+                  </div>
+                  <button class="primary" @click="changeTab = 'actions'">新增上线动作</button>
+                </div>
+
+                <div class="view-tabs">
+                  <button v-for="mode in viewModes" :key="mode.key" :class="{ active: viewMode === mode.key }" @click="viewMode = mode.key">
+                    {{ mode.label }}
+                  </button>
+                </div>
+                <NodeTable
+                  v-if="viewMode === 'table'"
+                  :nodes="selectedChange.nodes"
+                  :items="selectedChange.items"
+                  @edit-item="openItemEditor"
+                  @operate-item="operateItem"
+                />
+                <NodeTree v-if="viewMode === 'tree'" :nodes="selectedChange.nodes" :items="selectedChange.items" />
+                <NodeGraph v-if="viewMode === 'graph'" :nodes="selectedChange.nodes" :items="selectedChange.items" />
+
+                <form v-if="creatingItem || editingItem" class="item-editor payload-editor" @submit.prevent="editingItem ? saveItem() : createItem()">
+                  <div class="section-head">
+                    <h4>{{ editingItem ? '更新子 change' : '新增上线项' }}：{{ itemTypeName(itemForm.itemType) }}</h4>
+                    <button type="button" class="ghost" @click="closeItemEditor">收起</button>
+                  </div>
+                  <div class="form-grid">
+                    <label>
+                      类型
+                      <select v-model="itemForm.itemType" @change="applyItemTypeDefaults">
+                        <option v-for="option in itemTypeOptions" :key="option.value" :value="option.value">
+                          {{ option.label }}
+                        </option>
+                      </select>
+                    </label>
+                    <label>
+                      组件
+                      <select v-model="itemForm.componentKey">
+                        <option v-for="component in components" :key="component.componentKey" :value="component.componentKey">
+                          {{ component.componentName }}
+                        </option>
+                      </select>
+                    </label>
+                    <label>
+                      标题
+                      <input v-model="itemForm.title" />
+                    </label>
+                    <label>
+                      负责人
+                      <input v-model="itemForm.ownerDisplayName" />
+                    </label>
+                    <label>
+                      载荷路径/key/topic/index/table/job
+                      <input v-model="itemForm.payloadPath" />
+                    </label>
+                    <label>
+                      上线内容
+                      <textarea v-model="itemForm.changeContent" rows="3" />
+                    </label>
+                  </div>
+                  <PayloadFields v-model:item="itemForm" />
+                  <div class="form-grid">
+                    <label>
+                      增量计划
+                      <textarea v-model="itemForm.incrementalPlan" rows="3" />
+                    </label>
+                    <label>
+                      回滚计划
+                      <textarea v-model="itemForm.rollbackPlan" rows="3" />
+                    </label>
+                    <label>
+                      测试计划
+                      <textarea v-model="itemForm.testPlan" rows="3" />
+                    </label>
+                    <label>
+                      数据采集计划
+                      <textarea v-model="itemForm.dataProbePlan" rows="3" />
+                    </label>
+                  </div>
+                  <button class="primary" type="submit">{{ editingItem ? '保存子 change' : '加入上线计划' }}</button>
+                </form>
+              </section>
+
+              <section v-if="changeTab === 'actions'" class="tab-pane">
+                <div class="pane-head">
+                  <div>
+                    <h4>新增上线动作</h4>
+                    <p>SQL、配置、ES 索引、HBase DDL、Kafka Topic、代码和新组件，都从这里单独建子 change。</p>
                   </div>
                 </div>
-                <div class="action-catalog">
-                  <article v-for="entry in componentActions" :key="entry.type">
-                    <span>{{ entry.componentLabel }}</span>
+                <div class="action-groups">
+                  <article v-for="group in componentActionGroups" :key="group.key" class="action-group-card">
+                    <div class="compact-head">
+                      <h4>{{ group.label }}</h4>
+                      <p>{{ group.copy }}</p>
+                    </div>
+                    <div class="action-catalog">
+                      <article v-for="entry in group.actions" :key="entry.type">
+                        <span>{{ entry.componentLabel }}</span>
+                        <strong>{{ entry.title }}</strong>
+                        <p>{{ entry.copy }}</p>
+                        <button @click="startNewItem(entry.type)">{{ entry.button }}</button>
+                      </article>
+                    </div>
+                  </article>
+                </div>
+
+                <section class="payload-guide legacy-guide">
+                  <article v-for="entry in payloadGuides" :key="entry.type">
                     <strong>{{ entry.title }}</strong>
                     <p>{{ entry.copy }}</p>
                     <button @click="startNewItem(entry.type)">{{ entry.button }}</button>
                   </article>
-                </div>
+                </section>
               </section>
 
-              <section class="payload-guide legacy-guide">
-                <article v-for="entry in payloadGuides" :key="entry.type">
-                  <strong>{{ entry.title }}</strong>
-                  <p>{{ entry.copy }}</p>
-                  <button @click="startNewItem(entry.type)">{{ entry.button }}</button>
-                </article>
+              <section v-if="changeTab === 'review'" class="tab-pane">
+                <div class="workflow-grid">
+                  <article class="workflow-card">
+                    <span class="step-index">01</span>
+                    <h4>提交和演示</h4>
+                    <p>先提交评审；如果开发人也参与评审，先向另一位评审演示。</p>
+                    <div class="flow-actions">
+                      <button @click="submitChange">提交评审</button>
+                      <button @click="recordDemo">演示确认</button>
+                    </div>
+                  </article>
+                  <article class="workflow-card">
+                    <span class="step-index">02</span>
+                    <h4>双人评审</h4>
+                    <p>两位评审都要测试并承担责任。紧急上线也要觉哥确认。</p>
+                    <div class="flow-actions">
+                      <button @click="approveAs('reviewer_a', '评审 A')">评审 A 通过</button>
+                      <button @click="approveAs('reviewer_b', '评审 B')">评审 B 通过</button>
+                      <button class="primary" @click="approveAs('juege', '觉哥')">觉哥确认</button>
+                    </div>
+                  </article>
+                  <article class="workflow-card">
+                    <span class="step-index">03</span>
+                    <h4>规范和证据</h4>
+                    <p>上线前要补齐组件规范和评审测试证据，不能只点确认。</p>
+                    <div class="flow-actions">
+                      <button @click="validateSpecs">规范校验</button>
+                      <button @click="recordAllReviewerTests">补齐评审测试</button>
+                    </div>
+                  </article>
+                </div>
+
+                <section class="report-grid audit-grid">
+                  <article>
+                    <h4>审批记录</h4>
+                    <p v-for="review in selectedChange.reviews" :key="review.id">
+                      {{ review.reviewerDisplayName }} · {{ review.reviewType }} · {{ review.passed ? '通过' : '拒绝' }}
+                    </p>
+                    <p v-if="!(selectedChange.reviews && selectedChange.reviews.length)" class="empty-line">还没有审批记录。</p>
+                  </article>
+                  <article>
+                    <h4>评审测试证据</h4>
+                    <p v-for="evidence in selectedChange.evidences" :key="evidence.id">
+                      {{ evidence.componentKey }} · {{ evidence.reviewerDisplayName }} · {{ evidence.environmentCode }} · {{ evidence.passed ? '通过' : '失败' }}
+                    </p>
+                    <p v-if="!(selectedChange.evidences && selectedChange.evidences.length)" class="empty-line">还没有评审测试证据。</p>
+                  </article>
+                  <article>
+                    <h4>演示确认</h4>
+                    <p v-for="demo in selectedChange.demos || []" :key="demo.id">
+                      {{ demo.developerUsername }} -> {{ demo.reviewerUsername }} · {{ demo.content }}
+                    </p>
+                    <p v-if="!(selectedChange.demos && selectedChange.demos.length)" class="empty-line">还没有记录演示确认。</p>
+                  </article>
+                </section>
               </section>
 
-              <div class="action-row">
-                <button @click="submitChange">提交</button>
-                <button @click="recordDemo">演示确认</button>
-                <button @click="approveAs('reviewer_a', '评审 A')">评审 A 通过</button>
-                <button @click="approveAs('reviewer_b', '评审 B')">评审 B 通过</button>
-                <button class="primary" @click="approveAs('juege', '觉哥')">觉哥确认</button>
-                <button @click="validateSpecs">规范校验</button>
-                <button @click="recordAllReviewerTests">补齐评审测试</button>
-                <button @click="runEnvDiff">环境差异</button>
-                <button @click="runAnnounceCheck">announce</button>
-                <button @click="runFunctionTest">功能测试</button>
-                <button @click="runDataTest">数据对比</button>
-                <button class="primary" @click="switchGreen">切绿</button>
-                <button @click="manualVerify">生产人工验证</button>
-                <button @click="syncBlue">同步蓝</button>
-                <button @click="switchBlue">回蓝</button>
-                <button class="danger-button" @click="rollback">回滚</button>
-              </div>
-
-              <div class="view-tabs">
-                <button v-for="mode in viewModes" :key="mode.key" :class="{ active: viewMode === mode.key }" @click="viewMode = mode.key">
-                  {{ mode.label }}
-                </button>
-              </div>
-              <NodeTable
-                v-if="viewMode === 'table'"
-                :nodes="selectedChange.nodes"
-                :items="selectedChange.items"
-                @edit-item="openItemEditor"
-                @operate-item="operateItem"
-              />
-              <NodeTree v-if="viewMode === 'tree'" :nodes="selectedChange.nodes" :items="selectedChange.items" />
-              <NodeGraph v-if="viewMode === 'graph'" :nodes="selectedChange.nodes" :items="selectedChange.items" />
-
-              <form v-if="creatingItem || editingItem" class="item-editor payload-editor" @submit.prevent="editingItem ? saveItem() : createItem()">
-                <div class="section-head">
-                  <h4>{{ editingItem ? '更新子 change' : '新增上线项' }}：{{ itemTypeName(itemForm.itemType) }}</h4>
-                  <button type="button" class="ghost" @click="closeItemEditor">收起</button>
+              <section v-if="changeTab === 'gates'" class="tab-pane">
+                <div class="workflow-grid">
+                  <article class="workflow-card">
+                    <span class="step-index">01</span>
+                    <h4>自动化报告</h4>
+                    <p>环境差异、announce、功能测试和数据对比都通过后，才允许切绿。</p>
+                    <div class="flow-actions">
+                      <button @click="runEnvDiff">环境差异</button>
+                      <button @click="runAnnounceCheck">announce</button>
+                      <button @click="runFunctionTest">功能测试</button>
+                      <button @click="runDataTest">数据对比</button>
+                    </div>
+                  </article>
+                  <article class="workflow-card">
+                    <span class="step-index">02</span>
+                    <h4>蓝绿切换</h4>
+                    <p>先切绿，再人工验证。没问题后同步蓝；有问题就回蓝。</p>
+                    <div class="flow-actions">
+                      <button class="primary" @click="switchGreen">切绿</button>
+                      <button @click="manualVerify">生产人工验证</button>
+                      <button @click="syncBlue">同步蓝</button>
+                      <button @click="switchBlue">回蓝</button>
+                    </div>
+                  </article>
+                  <article class="workflow-card danger-card">
+                    <span class="step-index">03</span>
+                    <h4>异常处理</h4>
+                    <p>如果单节点或整体上线有问题，按节点回滚，并再次核对课程和用户模块。</p>
+                    <div class="flow-actions">
+                      <button class="danger-button" @click="rollback">整单回滚</button>
+                    </div>
+                  </article>
                 </div>
-                <div class="form-grid">
-                  <label>
-                    类型
-                    <select v-model="itemForm.itemType" @change="applyItemTypeDefaults">
-                      <option v-for="option in itemTypeOptions" :key="option.value" :value="option.value">
-                        {{ option.label }}
-                      </option>
-                    </select>
-                  </label>
-                  <label>
-                    组件
-                    <select v-model="itemForm.componentKey">
-                      <option v-for="component in components" :key="component.componentKey" :value="component.componentKey">
-                        {{ component.componentName }}
-                      </option>
-                    </select>
-                  </label>
-                  <label>
-                    标题
-                    <input v-model="itemForm.title" />
-                  </label>
-                  <label>
-                    负责人
-                    <input v-model="itemForm.ownerDisplayName" />
-                  </label>
-                  <label>
-                    载荷路径/key/topic/index/table/job
-                    <input v-model="itemForm.payloadPath" />
-                  </label>
-                  <label>
-                    上线内容
-                    <textarea v-model="itemForm.changeContent" rows="3" />
-                  </label>
-                </div>
-                <PayloadFields v-model:item="itemForm" />
-                <div class="form-grid">
-                  <label>
-                    增量计划
-                    <textarea v-model="itemForm.incrementalPlan" rows="3" />
-                  </label>
-                  <label>
-                    回滚计划
-                    <textarea v-model="itemForm.rollbackPlan" rows="3" />
-                  </label>
-                  <label>
-                    测试计划
-                    <textarea v-model="itemForm.testPlan" rows="3" />
-                  </label>
-                  <label>
-                    数据采集计划
-                    <textarea v-model="itemForm.dataProbePlan" rows="3" />
-                  </label>
-                </div>
-                <button class="primary" type="submit">{{ editingItem ? '保存子 change' : '加入上线计划' }}</button>
-              </form>
 
-              <section class="report-grid">
-                <article>
-                  <h4>审批记录</h4>
-                  <p v-for="review in selectedChange.reviews" :key="review.id">
-                    {{ review.reviewerDisplayName }} · {{ review.reviewType }} · {{ review.passed ? '通过' : '拒绝' }}
-                  </p>
-                </article>
-                <article>
-                  <h4>评审测试证据</h4>
-                  <p v-for="evidence in selectedChange.evidences" :key="evidence.id">
-                    {{ evidence.componentKey }} · {{ evidence.reviewerDisplayName }} · {{ evidence.environmentCode }} · {{ evidence.passed ? '通过' : '失败' }}
-                  </p>
-                </article>
-                <article>
-                  <h4>演示确认</h4>
-                  <p v-for="demo in selectedChange.demos || []" :key="demo.id">
-                    {{ demo.developerUsername }} -> {{ demo.reviewerUsername }} · {{ demo.content }}
-                  </p>
-                  <p v-if="!(selectedChange.demos && selectedChange.demos.length)">还没有记录演示确认。</p>
-                </article>
-                <article>
-                  <h4>测试报告</h4>
-                  <p v-for="report in selectedChange.reports" :key="report.id">
-                    {{ report.reportType }} · {{ report.summary }}
-                  </p>
-                </article>
-                <article>
-                  <h4>操作链</h4>
-                  <p v-for="operation in selectedChange.operations" :key="operation.id">
-                    {{ operation.operationType }} · {{ operation.operationStatus }} · {{ operation.safeMode ? '安全模式' : '真实执行' }}
-                  </p>
-                </article>
+                <div v-if="releaseGate" class="gate-card" :class="{ ready: releaseGate.readyForGreen }">
+                  <strong>{{ releaseGate.readyForGreen ? '可以切绿' : '暂不能切绿' }}</strong>
+                  <p>{{ releaseGate.prodSafety }}</p>
+                  <ul v-if="releaseGate.blockers && releaseGate.blockers.length">
+                    <li v-for="blocker in releaseGate.blockers" :key="blocker">{{ blocker }}</li>
+                  </ul>
+                </div>
+
+                <section class="report-grid audit-grid">
+                  <article>
+                    <h4>测试报告</h4>
+                    <p v-for="report in selectedChange.reports" :key="report.id">
+                      {{ report.reportType }} · {{ report.summary }}
+                    </p>
+                    <p v-if="!(selectedChange.reports && selectedChange.reports.length)" class="empty-line">还没有测试报告。</p>
+                  </article>
+                </section>
+              </section>
+
+              <section v-if="changeTab === 'audit'" class="tab-pane">
+                <section class="report-grid audit-grid">
+                  <article>
+                    <h4>审批记录</h4>
+                    <p v-for="review in selectedChange.reviews" :key="review.id">
+                      {{ review.reviewerDisplayName }} · {{ review.reviewType }} · {{ review.passed ? '通过' : '拒绝' }}
+                    </p>
+                    <p v-if="!(selectedChange.reviews && selectedChange.reviews.length)" class="empty-line">还没有审批记录。</p>
+                  </article>
+                  <article>
+                    <h4>评审测试证据</h4>
+                    <p v-for="evidence in selectedChange.evidences" :key="evidence.id">
+                      {{ evidence.componentKey }} · {{ evidence.reviewerDisplayName }} · {{ evidence.environmentCode }} · {{ evidence.passed ? '通过' : '失败' }}
+                    </p>
+                    <p v-if="!(selectedChange.evidences && selectedChange.evidences.length)" class="empty-line">还没有评审测试证据。</p>
+                  </article>
+                  <article>
+                    <h4>演示确认</h4>
+                    <p v-for="demo in selectedChange.demos || []" :key="demo.id">
+                      {{ demo.developerUsername }} -> {{ demo.reviewerUsername }} · {{ demo.content }}
+                    </p>
+                    <p v-if="!(selectedChange.demos && selectedChange.demos.length)" class="empty-line">还没有记录演示确认。</p>
+                  </article>
+                  <article>
+                    <h4>测试报告</h4>
+                    <p v-for="report in selectedChange.reports" :key="report.id">
+                      {{ report.reportType }} · {{ report.summary }}
+                    </p>
+                    <p v-if="!(selectedChange.reports && selectedChange.reports.length)" class="empty-line">还没有测试报告。</p>
+                  </article>
+                  <article>
+                    <h4>操作链</h4>
+                    <p v-for="operation in selectedChange.operations" :key="operation.id">
+                      {{ operation.operationType }} · {{ operation.operationStatus }} · {{ operation.safeMode ? '安全模式' : '真实执行' }}
+                    </p>
+                    <p v-if="!(selectedChange.operations && selectedChange.operations.length)" class="empty-line">还没有操作记录。</p>
+                  </article>
+                </section>
               </section>
             </template>
             <p v-else class="empty">请选择一个变更单。</p>
@@ -344,6 +473,7 @@ const changes = ref([])
 const selectedChange = ref(null)
 const releaseGate = ref(null)
 const viewMode = ref('table')
+const changeTab = ref('items')
 const loginForm = ref({ username: 'juege', password: '' })
 const creatingItem = ref(false)
 const editingItem = ref(null)
@@ -360,6 +490,14 @@ const viewModes = [
   { key: 'table', label: '表格' },
   { key: 'tree', label: '树' },
   { key: 'graph', label: '图' }
+]
+
+const changeTabs = [
+  { key: 'items', label: '上线项', copy: '节点、编辑、单项执行' },
+  { key: 'actions', label: '新增动作', copy: 'SQL、配置、代码、组件' },
+  { key: 'review', label: '审批测试', copy: '提交、演示、双评审' },
+  { key: 'gates', label: '报告闸门', copy: '报告、切绿、回蓝' },
+  { key: 'audit', label: '操作链', copy: '证据和流水' }
 ]
 
 const itemTypeOptions = [
@@ -403,13 +541,53 @@ const componentActions = [
   { type: 'KAFKA_TOPIC', componentLabel: 'Kafka', title: '新增 Topic', copy: '填 topic、分区、副本、retention、生产消费验证。', button: '新增 Kafka Topic' },
   { type: 'KAFKA_CONFIG', componentLabel: 'Kafka', title: '修改 Kafka 配置', copy: '填 broker/topic 配置 diff、重启范围、lag 观察。', button: '新增 Kafka 配置' },
   { type: 'NACOS_CONFIG', componentLabel: 'Nacos', title: '发布配置', copy: '填 dataId、group、namespace、diff 和回滚内容。', button: '新增 Nacos 配置' },
+  { type: 'ZOOKEEPER_CONFIG', componentLabel: 'Zookeeper', title: '修改 Zookeeper 配置', copy: '填 zoo.cfg diff、quorum、会话超时和 Kafka 影响。', button: '新增 Zookeeper 配置' },
+  { type: 'KIBANA_CONFIG', componentLabel: 'Kibana', title: '修改 Kibana 配置', copy: '填 kibana.yml diff、ES 地址、basePath 和重启验证。', button: '新增 Kibana 配置' },
   { type: 'XXLJOB_TASK', componentLabel: 'XXLJob', title: '新增/修改任务', copy: '填 jobHandler、cron、路由、阻塞策略、停用回滚。', button: '新增 XXLJob 任务' },
   { type: 'XXLJOB_CONFIG', componentLabel: 'XXLJob', title: '修改 XXLJob 配置', copy: '填 admin 配置、执行器注册、回滚配置和日志验证。', button: '新增 XXLJob 配置' },
+  { type: 'FLINK_JOB', componentLabel: 'Flink', title: '发布 Flink 任务', copy: '填 jar、并发、checkpoint/savepoint、输入输出和回滚点。', button: '新增 Flink 任务' },
+  { type: 'FLINK_CONFIG', componentLabel: 'Flink', title: '修改 Flink 配置', copy: '填 flink-conf.yaml diff、JM/TM 重启范围和 checkpoint 验证。', button: '新增 Flink 配置' },
   { type: 'REDIS_SCRIPT', componentLabel: 'Redis', title: '脚本/Key 变更', copy: '填 Lua/命令、key 前缀、TTL、回滚和数量对比。', button: '新增 Redis 变更' },
   { type: 'CODE', componentLabel: 'Java/Vue', title: '发布代码', copy: '填分支、commit 范围、构建产物、改动大纲和疑似 bug。', button: '新增代码发布' },
+  { type: 'FILEBEAT_CONFIG', componentLabel: 'Filebeat', title: '修改日志采集配置', copy: '填采集路径、index、pipeline、multiline 和回滚配置。', button: '新增 Filebeat 配置' },
+  { type: 'OTEL_CONFIG', componentLabel: 'OTel', title: '修改链路采集配置', copy: '填 receiver、processor、exporter、采样率和验证方式。', button: '新增 OTel 配置' },
+  { type: 'SECRET_CONFIG', componentLabel: 'Secret', title: '修改密钥服务配置', copy: '只记录 key 名、版本和脱敏 diff，不能保存密钥明文。', button: '新增密钥配置' },
   { type: 'NGINX_CONFIG', componentLabel: 'Nginx', title: '修改网关配置', copy: '填 server/upstream diff、nginx -t、回切配置和 reload 计划。', button: '新增 Nginx 配置' },
-  { type: 'COMPOSE_CHANGE', componentLabel: 'Compose', title: '新增组件', copy: '填镜像、数据目录、配置目录、healthcheck 和回滚 compose。', button: '新增组件上线' }
+  { type: 'COMPOSE_CHANGE', componentLabel: 'Compose', title: '新增组件', copy: '填镜像、数据目录、配置目录、healthcheck 和回滚 compose。', button: '新增组件上线' },
+  { type: 'QDRANT_COLLECTION', componentLabel: 'Qdrant', title: '新增 Collection', copy: '填向量维度、索引参数、alias、数据导入和回切方案。', button: '新增 Qdrant Collection' },
+  { type: 'QDRANT_CONFIG', componentLabel: 'Qdrant', title: '修改 Qdrant 配置', copy: '填 config.yaml diff、存储目录、端口和 collection 验证。', button: '新增 Qdrant 配置' },
+  { type: 'MONGODB_SCRIPT', componentLabel: 'MongoDB', title: '上线 MongoDB 脚本', copy: '填 collection、索引、影响文档数、幂等和回滚脚本。', button: '新增 MongoDB 脚本' }
 ]
+
+const componentActionGroups = [
+  {
+    key: 'data',
+    label: '数据和存储',
+    copy: '库表、索引、集合、DDL、脚本类变更。',
+    types: ['MYSQL_SQL', 'ES_INDEX', 'HBASE_DDL', 'QDRANT_COLLECTION', 'MONGODB_SCRIPT']
+  },
+  {
+    key: 'config',
+    label: '配置和中间件',
+    copy: 'Nacos、Redis、Kafka、ES、HBase、网关等配置。',
+    types: ['NACOS_CONFIG', 'REDIS_CONFIG', 'KAFKA_CONFIG', 'ES_CONFIG', 'HBASE_CONFIG', 'NGINX_CONFIG', 'XXLJOB_CONFIG']
+  },
+  {
+    key: 'runtime',
+    label: '任务、代码和组件',
+    copy: '代码发布、Topic、XXLJob、Flink、新增组件。',
+    types: ['CODE', 'KAFKA_TOPIC', 'XXLJOB_TASK', 'FLINK_JOB', 'COMPOSE_CHANGE', 'REDIS_SCRIPT']
+  },
+  {
+    key: 'ops',
+    label: '观测和扩展',
+    copy: '日志、链路、密钥、Kibana、Qdrant 和周边配置。',
+    types: ['ZOOKEEPER_CONFIG', 'KIBANA_CONFIG', 'FLINK_CONFIG', 'FILEBEAT_CONFIG', 'OTEL_CONFIG', 'SECRET_CONFIG', 'QDRANT_CONFIG']
+  }
+].map((group) => ({
+  ...group,
+  actions: group.types.map((type) => componentActions.find((action) => action.type === type)).filter(Boolean)
+}))
 
 const payloadGuides = [
   { type: 'SQL', title: '通用 SQL', copy: '临时 SQL 可走这里；推荐优先选 MySQL SQL 或 HBase DDL。', button: '新增 SQL' },
@@ -748,7 +926,7 @@ async function loadChange(id) {
 }
 
 async function loadReleaseGate() {
-  if (page.value === 'reports' && selectedChange.value) {
+  if ((page.value === 'reports' || changeTab.value === 'gates') && selectedChange.value) {
     releaseGate.value = await api(`/changes/${selectedChange.value.id}/reports`)
     return
   }
@@ -863,6 +1041,7 @@ function startNewItem(itemType) {
   editingItem.value = null
   itemForm.value = defaultItemForm(itemType)
   page.value = 'changes'
+  changeTab.value = 'items'
   focusItemEditor()
 }
 
@@ -1022,6 +1201,7 @@ function openItemEditor(item) {
   creatingItem.value = false
   editingItem.value = item
   itemForm.value = { ...item }
+  changeTab.value = 'items'
   notice.value = `正在编辑：${item.title || item.componentName}`
   focusItemEditor()
 }
@@ -1168,6 +1348,16 @@ watch(page, async (nextPage) => {
     await run(async () => {
       await loadReleaseGate()
     })
+  }
+})
+
+watch(changeTab, async (nextTab) => {
+  if (nextTab === 'gates' && selectedChange.value) {
+    await run(async () => {
+      await loadReleaseGate()
+    })
+  } else if (page.value !== 'reports') {
+    releaseGate.value = null
   }
 })
 
