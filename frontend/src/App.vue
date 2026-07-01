@@ -325,7 +325,7 @@
 </template>
 
 <script setup>
-import { computed, h, onMounted, ref, watch } from 'vue'
+import { computed, h, nextTick, onMounted, ref, watch } from 'vue'
 import { api, post, setToken as persistToken, getToken } from './api'
 
 const token = ref(getToken())
@@ -803,6 +803,7 @@ function startNewItem(itemType) {
   editingItem.value = null
   itemForm.value = defaultItemForm(itemType)
   page.value = 'changes'
+  focusItemEditor()
 }
 
 async function openActionFromComponent(itemType, component) {
@@ -827,6 +828,12 @@ async function openActionFromComponent(itemType, component) {
 function closeItemEditor() {
   creatingItem.value = false
   editingItem.value = null
+}
+
+function focusItemEditor() {
+  nextTick(() => {
+    document.querySelector('.item-editor')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  })
 }
 
 function applyItemTypeDefaults() {
@@ -955,6 +962,8 @@ function openItemEditor(item) {
   creatingItem.value = false
   editingItem.value = item
   itemForm.value = { ...item }
+  notice.value = `正在编辑：${item.title || item.componentName}`
+  focusItemEditor()
 }
 
 async function saveItem() {
