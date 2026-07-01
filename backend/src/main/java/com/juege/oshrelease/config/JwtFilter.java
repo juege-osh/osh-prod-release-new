@@ -1,6 +1,7 @@
 package com.juege.oshrelease.config;
 
-import com.juege.oshrelease.common.UnauthorizedException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.juege.oshrelease.common.ApiResponse;
 import com.juege.oshrelease.model.AppUser;
 import com.juege.oshrelease.repo.AppUserRepository;
 import io.jsonwebtoken.Claims;
@@ -18,10 +19,12 @@ public class JwtFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
     private final AppUserRepository appUserRepository;
+    private final ObjectMapper objectMapper;
 
-    public JwtFilter(JwtService jwtService, AppUserRepository appUserRepository) {
+    public JwtFilter(JwtService jwtService, AppUserRepository appUserRepository, ObjectMapper objectMapper) {
         this.jwtService = jwtService;
         this.appUserRepository = appUserRepository;
+        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -44,10 +47,11 @@ public class JwtFilter extends OncePerRequestFilter {
             }
             filterChain.doFilter(request, response);
         } catch (Exception ex) {
-            throw new UnauthorizedException("登录已失效，请重新登录");
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            response.setContentType("application/json;charset=UTF-8");
+            response.getWriter().write(objectMapper.writeValueAsString(ApiResponse.fail("登录已失效，请重新登录")));
         } finally {
             RequestContext.clear();
         }
     }
 }
-

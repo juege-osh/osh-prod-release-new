@@ -27,7 +27,12 @@ export async function api(path, options = {}) {
   })
   const payload = await response.json().catch(() => ({ success: false, message: '响应不是 JSON' }))
   if (!response.ok || payload.success === false) {
-    throw new Error(payload.message || `请求失败：${response.status}`)
+    if (response.status === 401) {
+      setToken('')
+    }
+    const error = new Error(payload.message || `请求失败：${response.status}`)
+    error.status = response.status
+    throw error
   }
   return payload.data
 }

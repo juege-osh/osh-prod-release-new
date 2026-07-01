@@ -124,6 +124,26 @@
                 <span>操作 {{ selectedChange.operations?.length || 0 }}</span>
               </div>
 
+              <div class="readiness-card" :class="{ ready: localReadiness.ready }">
+                <div>
+                  <strong>{{ localReadiness.ready ? '上线前检查已齐' : '上线前还差这些' }}</strong>
+                  <p>{{ localReadiness.summary }}</p>
+                </div>
+                <div class="readiness-pills">
+                  <button
+                    v-for="item in localReadiness.missing.slice(0, 6)"
+                    :key="item.key"
+                    :class="['readiness-pill', item.level]"
+                    @click="jumpToGap(item.tab)"
+                  >
+                    {{ item.label }}
+                  </button>
+                  <span v-if="localReadiness.missing.length > 6" class="readiness-more">
+                    还有 {{ localReadiness.missing.length - 6 }} 项
+                  </span>
+                </div>
+              </div>
+
               <div class="change-tabs">
                 <button v-for="tab in changeTabs" :key="tab.key" :class="{ active: changeTab === tab.key }" @click="changeTab = tab.key">
                   <strong>{{ tab.label }}</strong>
@@ -171,11 +191,12 @@
                     </label>
                     <label>
                       组件
-                      <select v-model="itemForm.componentKey">
+                      <select v-model="itemForm.componentKey" :disabled="!!editingItem">
                         <option v-for="component in components" :key="component.componentKey" :value="component.componentKey">
                           {{ component.componentName }}
                         </option>
                       </select>
+                      <small v-if="editingItem" class="field-hint">已有子 change 的组件不在这里换；要换组件，请新增一条上线项。</small>
                     </label>
                     <label>
                       标题
@@ -308,6 +329,25 @@
               </section>
 
               <section v-if="changeTab === 'gates'" class="tab-pane">
+                <div class="gap-board">
+                  <div class="compact-head">
+                    <h4>报告闸门缺口</h4>
+                    <p>切绿前必须全部补齐。这里显示的是前端本地预判，最终以后端接口为准。</p>
+                  </div>
+                  <div class="gap-list">
+                    <button
+                      v-for="item in localReadiness.missing"
+                      :key="item.key"
+                      :class="['gap-item', item.level]"
+                      @click="jumpToGap(item.tab)"
+                    >
+                      <strong>{{ item.label }}</strong>
+                      <span>{{ item.hint }}</span>
+                    </button>
+                    <p v-if="localReadiness.ready" class="empty-line">本地预检没有发现缺口，可以请求后端闸门确认。</p>
+                  </div>
+                </div>
+
                 <div class="workflow-grid">
                   <article class="workflow-card">
                     <span class="step-index">01</span>
@@ -879,6 +919,7 @@ const typeTemplates = {
 
 const currentTitle = computed(() => navItems.find((item) => item.key === page.value)?.label || '总览')
 const prettyReports = computed(() => JSON.stringify(selectedChange.value?.reports || [], null, 2))
+const localReadiness = computed(() => buildLocalReadiness(selectedChange.value))
 
 async function login() {
   await run(async () => {
@@ -1011,6 +1052,30 @@ async function createStepDemoChange() {
   })
 }
 
+async function createQuickChange(componentKeys, title, summary) {
+  const keys = Array.from(new Set((componentKeys || []).filter(Boolean)))
+  const change = await post('/changes', {
+    title,
+    projectBranch: 'release/20260708',
+    releaseType: 'NORMAL',
+    targetEnvCode: 'prod',
+    targetColor: 'green',
+    developerUsername: 'ops',
+    developerDisplayName: '运维同学',
+    demoRequired: true,
+    riskLevel: 'MEDIUM',
+    summary,
+    componentKeys: keys.length ? keys : ['nacos'],
+    contentJson: JSON.stringify({ quickCreate: true, protectedModules: ['course', 'user'], prodWrite: 'manual-confirm-required' })
+  })
+  selectedChange.value = change
+  await refreshAll()
+  if (selectedChange.value?.id) {
+    await loadChange(selectedChange.value.id)
+  }
+  return selectedChange.value || change
+}
+
 function itemUpdatePayload(item) {
   return {
     ownerUsername: item.ownerUsername,
@@ -1046,8 +1111,38 @@ function startNewItem(itemType) {
 }
 
 async function openActionFromComponent(itemType, component) {
+  let createdForAction = false
   if (!selectedChange.value && changes.value.length > 0) {
     await loadChange(changes.value[0].id)
+  }
+  if (!selectedChange.value) {
+    await createQuickChange(
+      [component?.componentKey || inferComponentKeyForUi(itemType)],
+      `快速上线单：${component?.componentName || itemTypeName(itemType)}`,
+      '从组件目录发起的安全模式上线单。只写治理库，真实生产执行前仍要走双评审和觉哥确认。'
+    )
+    createdForAction = true
+  }
+  if (createdForAction && selectedChange.value?.items?.length === 1) {
+    const item = selectedChange.value.items[0]
+    creatingItem.value = false
+    editingItem.value = item
+    itemForm.value = {
+      ...item,
+      ...defaultItemForm(itemType),
+      componentKey: item.componentKey,
+      title: `${component?.componentName || item.componentName || itemTypeName(itemType)} ${itemTypeName(itemType)}上线`,
+      payloadPath: component && (itemType === 'CONFIG' || String(itemType).endsWith('_CONFIG'))
+        ? component.configDir
+        : component && itemType === 'COMPOSE_CHANGE'
+          ? component.deployPath
+          : defaultItemForm(itemType).payloadPath
+    }
+    page.value = 'changes'
+    changeTab.value = 'items'
+    notice.value = '已创建安全模式上线单，先补这条子 change。'
+    focusItemEditor()
+    return
   }
   startNewItem(itemType)
   if (component) {
@@ -1062,6 +1157,13 @@ async function openActionFromComponent(itemType, component) {
           : itemForm.value.payloadPath
     }
   }
+}
+
+function jumpToGap(tab) {
+  if (tab) {
+    changeTab.value = tab
+  }
+  page.value = 'changes'
 }
 
 function closeItemEditor() {
@@ -1299,6 +1401,116 @@ function itemTypeName(itemType) {
   return itemTypeOptions.find((item) => item.value === itemType)?.label || itemType || '组件'
 }
 
+function inferComponentKeyForUi(itemType) {
+  const mapping = {
+    SQL: 'mysql',
+    MYSQL_SQL: 'mysql',
+    REDIS_SCRIPT: 'redis',
+    REDIS_CONFIG: 'redis',
+    NACOS_CONFIG: 'nacos',
+    KAFKA_TOPIC: 'kafka',
+    KAFKA_CONFIG: 'kafka',
+    ZOOKEEPER_CONFIG: 'zookeeper',
+    ES_INDEX: 'elasticsearch',
+    ES_CONFIG: 'elasticsearch',
+    KIBANA_CONFIG: 'kibana',
+    HBASE_DDL: 'hbase',
+    HBASE_CONFIG: 'hbase',
+    XXLJOB_TASK: 'xxl-job',
+    XXLJOB_CONFIG: 'xxl-job',
+    FLINK_JOB: 'flink',
+    FLINK_CONFIG: 'flink',
+    CODE: 'java-backend',
+    FILEBEAT_CONFIG: 'filebeat',
+    OTEL_CONFIG: 'otel-collector',
+    SECRET_CONFIG: 'secret-manager',
+    NGINX_CONFIG: 'nginx',
+    COMPOSE_CHANGE: 'docker-compose',
+    QDRANT_COLLECTION: 'qdrant',
+    QDRANT_CONFIG: 'qdrant',
+    MONGODB_SCRIPT: 'mongodb',
+    CONFIG: 'nacos',
+    COMPONENT: 'docker-compose'
+  }
+  return mapping[itemType] || 'nacos'
+}
+
+function buildLocalReadiness(change) {
+  const missing = []
+  if (!change) {
+    return { ready: false, missing, summary: '先选一个变更单。' }
+  }
+  const items = change.items || []
+  const reports = change.reports || []
+  const operations = change.operations || []
+  const reportPassed = (type) => reports.some((report) => report.reportType === type && report.passed)
+  const itemOperation = (item, type) => operations.some((operation) =>
+    operation.operationType === type && operationMatchesUiItem(operation, item)
+  )
+  const itemOperationPassed = (item, type) => operations.some((operation) =>
+    operation.operationType === type
+      && ['PASSED', 'RECORDED'].includes(operation.operationStatus)
+      && operationMatchesUiItem(operation, item)
+  )
+  if (!items.length) {
+    missing.push(gap('missing-items', '还没有上线项', '先新增 SQL、配置、代码或组件动作。', 'actions', 'warn'))
+  }
+  if (!['APPROVED', 'TESTING', 'SWITCHED', 'VERIFIED', 'RELEASED'].includes(change.status)) {
+    missing.push(gap('approval', '审批没完成', '提交评审、演示确认、两位评审和觉哥确认都要走完。', 'review', 'danger'))
+  }
+  if (!reportPassed('SPEC')) {
+    missing.push(gap('spec', '缺规范报告', '点“规范校验”，确保执行、回滚、风险、验证命令都填了。', 'review', 'warn'))
+  }
+  if (!reportPassed('FUNCTION')) {
+    missing.push(gap('function', '缺功能测试报告', '每个上线项先分析、dry-run、执行、验证，再跑功能测试。', 'gates', 'warn'))
+  }
+  if (!reportPassed('DATA')) {
+    missing.push(gap('data', '缺数据量报告', '跑数据对比，课程和用户模块必须单独确认。', 'gates', 'warn'))
+  }
+  if (!reportPassed('ENV_DIFF')) {
+    missing.push(gap('env-diff', '缺环境差异报告', '测试环境和生产蓝绿差异要先生成报告。', 'gates', 'warn'))
+  }
+  if (!reportPassed('ANNOUNCE')) {
+    missing.push(gap('announce', '缺 announce 检查', '测试环境 announce 文件状态要纳入上线前检查。', 'gates', 'warn'))
+  }
+  items.forEach((item) => {
+    const name = item.title || item.componentName || item.componentKey
+    if (item.specStatus !== 'PASSED') {
+      missing.push(gap(`item-spec-${item.id}`, `${name} 规范未过`, '补齐执行内容、回滚内容、风险分析和验证命令。', 'items', 'warn'))
+    }
+    if (!item.reviewerAConfirmed || !item.reviewerBConfirmed) {
+      missing.push(gap(`item-review-${item.id}`, `${name} 缺双评审证据`, '两位评审都要提交测试证据。', 'review', 'danger'))
+    }
+    if (!itemOperationPassed(item, 'ITEM_DRY_RUN')) {
+      missing.push(gap(`item-dry-${item.id}`, `${name} 缺 dry-run`, '先点单项 dry-run，不能直接执行。', 'items', 'danger'))
+    }
+    if (!itemOperation(item, 'ITEM_EXECUTE')) {
+      missing.push(gap(`item-exec-${item.id}`, `${name} 缺执行记录`, '只记录绿环境执行证据，安全模式不碰生产。', 'items', 'danger'))
+    }
+    if (!itemOperationPassed(item, 'ITEM_VERIFY')) {
+      missing.push(gap(`item-verify-${item.id}`, `${name} 缺验证`, '执行后要补验证通过记录。', 'items', 'danger'))
+    }
+  })
+  const ready = missing.length === 0
+  return {
+    ready,
+    missing,
+    summary: ready
+      ? '本地预检已齐，切绿时后端还会再挡一次。'
+      : `还有 ${missing.length} 个缺口，先补红色项，再补报告。`
+  }
+}
+
+function gap(key, label, hint, tab, level) {
+  return { key, label, hint, tab, level }
+}
+
+function operationMatchesUiItem(operation, item) {
+  const detail = operation?.detailJson || ''
+  return detail.includes(`"itemId":${item.id}`)
+    || detail.includes(`"itemOrder":${item.itemOrder},"itemType":"${item.itemType}"`)
+}
+
 function actionTypes(component) {
   return String(component?.actionTypes || 'CONFIG,COMPONENT')
     .split(',')
@@ -1334,6 +1546,12 @@ async function run(task) {
     await task()
   } catch (err) {
     error.value = err.message || '操作失败'
+    if (err.status === 401) {
+      token.value = ''
+      user.value = null
+      selectedChange.value = null
+      releaseGate.value = null
+    }
   }
 }
 
