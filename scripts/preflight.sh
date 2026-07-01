@@ -41,8 +41,10 @@ docker compose config >/tmp/osh-release-compose-ok.txt
 
 echo "[5/8] local script syntax"
 python3 -m py_compile scripts/smoke_release_flow.py
+python3 -m py_compile scripts/validate_release_runbook.py
 bash -n scripts/build_release_bundle.sh
 bash -n scripts/verify_release_bundle.sh
+python3 scripts/validate_release_runbook.py
 
 echo "[6/8] release bundle package"
 rm -rf /tmp/osh-release-bundle-preflight

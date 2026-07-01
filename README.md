@@ -8,6 +8,8 @@
 
 如果只是想知道日常怎么点、SQL/配置/代码怎么上线、怎么测和怎么回滚，看 [docs/OPERATION_TEST_GUIDE.md](docs/OPERATION_TEST_GUIDE.md)。
 
+如果要完整验收平台，看 [docs/COMMERCIAL_TEST_RUNBOOK.md](docs/COMMERCIAL_TEST_RUNBOOK.md)。里面把 SQL、配置、ES、Kafka、HBase、Redis、XXLJob、代码、新组件、蓝绿和回滚都拆成了具体步骤。
+
 治理台自身发版看 [docs/RELEASE_BUNDLE.md](docs/RELEASE_BUNDLE.md)。每次上线都先生成发布包和 sha256 校验清单，不要手工散拷文件。
 
 ## 默认账号

@@ -491,6 +491,54 @@
             <pre>{{ prettyReports }}</pre>
           </article>
         </section>
+
+        <section v-if="page === 'guide'" class="panel">
+          <div class="section-head">
+            <div>
+              <h3>操作手册</h3>
+              <p>照这里测：先在测试环境和绿环境留证据，再切绿。生产真实写操作仍要觉哥确认。</p>
+            </div>
+            <button class="primary" @click="createStepDemoChange">创建小步演示单</button>
+          </div>
+
+          <div class="runbook-alert">
+            <strong>上线总顺序</strong>
+            <p>新建变更单 -> 新增具体上线项 -> 分析 -> dry-run -> 执行记录 -> 验证 -> 双评审 -> 规范/环境/announce/功能/数据报告 -> 切绿 -> 生产人工验证 -> 同步蓝。出问题先回蓝，再按节点回滚。</p>
+          </div>
+
+          <div class="runbook-grid">
+            <article v-for="guide in runbookGuides" :key="guide.key" class="runbook-card">
+              <div class="runbook-card-head">
+                <span>{{ guide.badge }}</span>
+                <h4>{{ guide.title }}</h4>
+                <p>{{ guide.summary }}</p>
+              </div>
+              <div class="runbook-columns">
+                <div>
+                  <strong>操作步骤</strong>
+                  <ol>
+                    <li v-for="step in guide.steps" :key="step">{{ step }}</li>
+                  </ol>
+                </div>
+                <div>
+                  <strong>必填和回滚</strong>
+                  <ul>
+                    <li v-for="field in guide.fields" :key="field">{{ field }}</li>
+                  </ul>
+                </div>
+              </div>
+              <div class="command-box">
+                <strong>测试命令示例</strong>
+                <pre>{{ guide.commands }}</pre>
+              </div>
+              <div class="runbook-actions">
+                <button v-for="action in guide.actions" :key="action.type" @click="startGuideAction(action.type)">
+                  {{ action.label }}
+                </button>
+              </div>
+            </article>
+          </div>
+        </section>
       </section>
     </section>
   </main>
@@ -523,7 +571,8 @@ const navItems = [
   { key: 'dashboard', label: '总览' },
   { key: 'changes', label: 'Change' },
   { key: 'components', label: '组件目录' },
-  { key: 'reports', label: '报告' }
+  { key: 'reports', label: '报告' },
+  { key: 'guide', label: '操作手册' }
 ]
 
 const viewModes = [
@@ -633,6 +682,69 @@ const payloadGuides = [
   { type: 'SQL', title: '通用 SQL', copy: '临时 SQL 可走这里；推荐优先选 MySQL SQL 或 HBase DDL。', button: '新增 SQL' },
   { type: 'CONFIG', title: '通用配置', copy: '找不到专门组件时再用；Nacos、ES、HBase、Kafka 优先走上面的专用入口。', button: '新增配置' },
   { type: 'COMPONENT', title: '通用组件', copy: '新组件或非标准组件走这里，仍要填目录、compose、healthcheck 和回滚。', button: '新增组件' }
+]
+
+const runbookGuides = [
+  {
+    key: 'sql',
+    badge: 'SQL',
+    title: '上线 SQL 和回滚 SQL',
+    summary: '适合 MySQL DDL/DML、只读巡检 SQL。每条 SQL 都单独建上线项，不能混进代码发布里。',
+    steps: ['点 Change -> 新增动作 -> 新增 MySQL SQL', '填写执行 SQL、回滚 SQL、影响表、影响行数和验证 SQL', '先点分析，再点 dry-run，确认 explain 或事务回滚演练通过', '只记录绿环境执行证据，再点验证', '跑数据对比，课程和用户模块变化必须符合变更单'],
+    fields: ['执行 SQL 必须写 WHERE、影响行数和幂等判断', '回滚 SQL 必须能单独执行', '影响课程/用户模块必须单独写明并让觉哥确认', '回滚后重新跑数据对比'],
+    commands: 'EXPLAIN SELECT ...;\nSELECT COUNT(*) FROM target_table WHERE ...;\n-- 回滚后再次 SELECT 核对数量',
+    actions: [{ type: 'MYSQL_SQL', label: '新增 MySQL SQL' }, { type: 'SQL', label: '新增通用 SQL' }]
+  },
+  {
+    key: 'config',
+    badge: '配置',
+    title: '上线配置和回滚配置',
+    summary: '适合 Nacos、Redis、Kafka、ES、HBase、Nginx、XXLJob、Filebeat、OTel 等配置变更。',
+    steps: ['选专用入口，比如新增 Nacos 配置或新增 ES 配置', '填写配置路径/key、新旧 diff、刷新方式和回滚配置', '先在测试环境验证配置能加载', '绿环境执行后验证业务接口、健康检查和日志', '确认没问题后再进入切绿流程'],
+    fields: ['配置 diff 不能只写“改了配置”，要写旧值和新值', '密钥只能写 key 名和版本，不能写明文', '需要重启的配置要写滚动范围', '回滚配置要能直接恢复上一版'],
+    commands: 'docker compose config\nnginx -t\ncurl -fsS http://127.0.0.1:18080/actuator/health',
+    actions: [{ type: 'NACOS_CONFIG', label: '新增 Nacos 配置' }, { type: 'NGINX_CONFIG', label: '新增 Nginx 配置' }, { type: 'ES_CONFIG', label: '新增 ES 配置' }]
+  },
+  {
+    key: 'code',
+    badge: '代码',
+    title: '发布 Java/Vue 代码',
+    summary: '代码发布必须写 commit 范围、改动大纲、疑似 bug、构建产物和回滚版本。',
+    steps: ['点新增代码发布', '填写仓库、分支、commit 范围和构建产物', '列出接口、页面、定时任务、消息消费和配置变更', '如果配套 SQL/配置/Topic，要拆成单独上线项', '绿环境验证接口和页面，再切绿'],
+    fields: ['改动大纲要写清楚模块和接口', '疑似 bug 至少检查空值、枚举、缓存、字段兼容', '回滚版本必须明确到 commit、镜像或包路径', '前后端联动要说明上线顺序'],
+    commands: 'mvn -q -pl backend test\ncd frontend && npm run build\ncurl -fsS http://127.0.0.1:18080/actuator/health',
+    actions: [{ type: 'CODE', label: '新增代码发布' }]
+  },
+  {
+    key: 'middleware',
+    badge: '中间件',
+    title: 'ES、Kafka、HBase、XXLJob 等组件上线',
+    summary: '新增索引、Topic、HBase DDL、XXLJob 任务、Flink 任务都要独立节点，方便分步上线和单节点回滚。',
+    steps: ['在新增动作里选具体组件入口', '填写对象名，比如 index/topic/table/jobHandler', '填写执行内容、验证命令和回滚动作', '两位评审分别在测试环境和绿环境测一次', '通过报告闸门后再切绿'],
+    fields: ['ES 必须写 alias 回切方案', 'Kafka 必须写分区、副本、retention 和消费组验证', 'HBase 必须写 describe/exists 和 disable/drop 或切旧表方案', 'XXLJob 必须写默认启停和停用回滚'],
+    commands: 'GET _cluster/health\nkafka-topics --describe --topic your.topic\nexists "ns:table"\n检查 XXLJob 执行日志',
+    actions: [{ type: 'ES_INDEX', label: '新增 ES 索引' }, { type: 'KAFKA_TOPIC', label: '新增 Kafka Topic' }, { type: 'HBASE_DDL', label: '新增 HBase DDL' }, { type: 'XXLJOB_TASK', label: '新增 XXLJob 任务' }]
+  },
+  {
+    key: 'component',
+    badge: '组件',
+    title: '新增 MongoDB 等组件',
+    summary: '新组件必须满足配置目录、数据目录、compose、healthcheck、备份和回滚规范。',
+    steps: ['点新增组件上线', '填写镜像、端口、配置目录、数据目录和 docker-compose diff', '先在测试环境启动并验证持久化', '绿环境验证 healthcheck、日志和监控', '回滚时移除组件并清理隔离目录'],
+    fields: ['数据目录和配置目录必须固定', 'healthcheck 不能留空', '端口不能和现有组件冲突', '回滚 compose 和数据清理步骤要写清楚'],
+    commands: 'docker compose config\ndocker compose ps\ncurl -fsS http://127.0.0.1:PORT/health',
+    actions: [{ type: 'COMPOSE_CHANGE', label: '新增组件上线' }, { type: 'MONGODB_SCRIPT', label: '新增 MongoDB 脚本' }]
+  },
+  {
+    key: 'rollback',
+    badge: '回滚',
+    title: '回蓝、单节点回滚和数据复查',
+    summary: '切绿后有问题先回蓝。需要拆开处理时，按节点逆序回滚，并重新看数据量报告。',
+    steps: ['发现问题先点回蓝，恢复蓝系统对外', '在上线项里点对应节点回滚', '按 rollback_order 逆序处理配置、代码、数据和组件', '回滚后再跑功能测试和数据对比', '课程和用户模块必须单独复查'],
+    fields: ['回滚不能只写“恢复旧版本”', 'SQL/配置/代码/组件都要有独立回滚内容', '回滚后要留操作记录和验证证据', '如果影响课程/用户，必须写差异原因'],
+    commands: 'curl -fsS https://osh.lol/\nSELECT COUNT(*) FROM course_table;\nSELECT COUNT(*) FROM user_table;\ndocker compose ps',
+    actions: [{ type: 'MYSQL_SQL', label: '补 SQL 回滚项' }, { type: 'CODE', label: '补代码回滚项' }, { type: 'CONFIG', label: '补配置回滚项' }]
+  }
 ]
 
 const typeTemplates = {
@@ -1157,6 +1269,20 @@ async function openActionFromComponent(itemType, component) {
           : itemForm.value.payloadPath
     }
   }
+}
+
+async function startGuideAction(itemType) {
+  await run(async () => {
+    if (!selectedChange.value) {
+      await createQuickChange(
+        [inferComponentKeyForUi(itemType)],
+        `手册演练：${itemTypeName(itemType)}`,
+        '从操作手册发起的安全模式上线单。先在测试环境和绿环境测，再走切绿。'
+      )
+    }
+    startNewItem(itemType)
+    notice.value = `已打开 ${itemTypeName(itemType)} 上线模板`
+  })
 }
 
 function jumpToGap(tab) {

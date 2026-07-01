@@ -2,6 +2,8 @@
 
 这份给日常使用。你要上线 SQL、改配置、发代码、新增组件，都从这里走，不要绕过平台直接改生产。
 
+如果要做完整验收，看 [COMMERCIAL_TEST_RUNBOOK.md](COMMERCIAL_TEST_RUNBOOK.md)。那份文档把每类上线和回滚都写成了可照着测的步骤。
+
 ## 登录
 
 - 地址：`https://osh.lol/release-console/`

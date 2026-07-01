@@ -847,6 +847,110 @@ dd {
   padding-left: 20px;
 }
 
+.runbook-alert {
+  margin: 18px 0;
+  padding: 18px;
+  border: 1px solid rgba(33, 122, 84, 0.28);
+  border-radius: 22px;
+  background: linear-gradient(135deg, rgba(225, 244, 231, 0.78), rgba(255, 252, 242, 0.68));
+}
+
+.runbook-alert strong {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.runbook-alert p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.runbook-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.runbook-card {
+  padding: 18px;
+  display: grid;
+  gap: 16px;
+  border: 1px solid rgba(38, 95, 115, 0.2);
+  border-radius: 24px;
+  background:
+    linear-gradient(135deg, rgba(255, 252, 242, 0.86), rgba(225, 244, 231, 0.48));
+  box-shadow: 0 14px 30px rgba(16, 32, 27, 0.06);
+}
+
+.runbook-card-head {
+  display: grid;
+  gap: 8px;
+}
+
+.runbook-card-head span {
+  width: fit-content;
+  padding: 6px 10px;
+  border-radius: 999px;
+  color: #fffaf0;
+  background: var(--ink);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.runbook-card-head h4,
+.runbook-card-head p {
+  margin: 0;
+}
+
+.runbook-card-head p {
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.runbook-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.runbook-columns strong,
+.command-box strong {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.runbook-columns ol,
+.runbook-columns ul {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.runbook-columns li + li {
+  margin-top: 6px;
+}
+
+.command-box pre {
+  max-height: 220px;
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.runbook-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.runbook-actions button {
+  padding: 9px 13px;
+  border-radius: 999px;
+  color: #fffaf0;
+  background: var(--green);
+}
+
 .component-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
@@ -957,6 +1061,8 @@ pre {
   .grid,
   .component-grid,
   .report-grid,
+  .runbook-grid,
+  .runbook-columns,
   .action-catalog,
   .payload-guide,
   .readiness-card,
