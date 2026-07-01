@@ -2,6 +2,8 @@
 
 这份文档是给日常上线、演练、回滚和排障用的。目标很简单：让人一眼知道该点哪里、该看什么、出了问题该退到哪一步。
 
+更短的上手手册见 [OPERATION_TEST_GUIDE.md](OPERATION_TEST_GUIDE.md)。里面按 MySQL SQL、ES、HBase、Kafka、Nacos、XXLJob、Redis、代码发布和新增组件拆开写。
+
 ## 1. 先认清环境
 
 - `osh-test`：`43.242.200.25:58753`

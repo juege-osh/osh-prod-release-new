@@ -6,6 +6,8 @@
 
 完整操作说明见 [docs/USAGE.md](docs/USAGE.md)。
 
+如果只是想知道日常怎么点、SQL/配置/代码怎么上线、怎么测和怎么回滚，看 [docs/OPERATION_TEST_GUIDE.md](docs/OPERATION_TEST_GUIDE.md)。
+
 ## 默认账号
 
 - 觉哥：`juege`
