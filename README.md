@@ -8,6 +8,8 @@
 
 如果只是想知道日常怎么点、SQL/配置/代码怎么上线、怎么测和怎么回滚，看 [docs/OPERATION_TEST_GUIDE.md](docs/OPERATION_TEST_GUIDE.md)。
 
+治理台自身发版看 [docs/RELEASE_BUNDLE.md](docs/RELEASE_BUNDLE.md)。每次上线都先生成发布包和 sha256 校验清单，不要手工散拷文件。
+
 ## 默认账号
 
 - 觉哥：`juege`

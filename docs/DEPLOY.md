@@ -18,7 +18,7 @@ docker compose up -d --build
 - Web：`http://服务器IP:18081`
 - Health：`http://服务器IP:18080/actuator/health`
 
-启动后先跑 API 冒烟：
+启动后先跑检查：
 
 ```bash
 scripts/preflight.sh
@@ -29,6 +29,77 @@ python3 scripts/smoke_release_flow.py
 ```
 
 如果要对远程治理台跑演练，必须额外设置 `OSH_RELEASE_ALLOW_REMOTE_SMOKE=1`，避免误写线上治理记录。
+
+## 发布包方式
+
+治理台自己也要按发布包上线，不建议临时拷贝几个文件。
+
+在本机或 CI 上打包：
+
+```bash
+scripts/preflight.sh
+scripts/build_release_bundle.sh
+scripts/verify_release_bundle.sh release-bundles/osh-prod-release-*.tar.gz
+```
+
+发布包里有：
+
+- `source/`：可部署源码、Docker Compose、脚本和文档。
+- `artifacts/backend/app.jar`：本次提交构建出的后端 jar。
+- `artifacts/frontend/dist/`：本次提交构建出的前端静态文件。
+- `RELEASE_MANIFEST.md`：分支、commit、构建时间和部署检查项。
+- `SHA256SUMS`：包内文件校验清单。
+
+拷贝到测试服后先校验：
+
+```bash
+scp -P 58753 release-bundles/osh-prod-release-*.tar.gz* osh-test:/tmp/
+ssh osh-test 'cd /tmp && shasum -a 256 -c osh-prod-release-*.tar.gz.sha256'
+```
+
+Linux 服务器如果没有 `shasum`，用：
+
+```bash
+ssh osh-test 'cd /tmp && sha256sum -c osh-prod-release-*.tar.gz.sha256'
+```
+
+解包部署：
+
+```bash
+ssh osh-test
+mkdir -p /opt/osh-prod-release-new/releases
+cd /opt/osh-prod-release-new/releases
+tar -xzf /tmp/osh-prod-release-*.tar.gz
+cd osh-prod-release-*/source
+cp /opt/osh-prod-release-new/current/.env .env
+docker compose config
+docker compose up -d --build
+curl -fsS http://127.0.0.1:18080/actuator/health
+```
+
+第一次部署时没有旧 `.env`，就从 `.env.example` 复制一份，只在服务器本地填真实密码：
+
+```bash
+cp .env.example .env
+```
+
+生产部署也按同样方式做，但要先在测试服跑通页面、接口、报告、切绿闸门和回滚记录。没有觉哥确认，不做生产写操作。
+
+## 治理台自身回滚
+
+治理台发版失败时，回滚治理台本身，不要碰主业务系统。
+
+推荐方式：
+
+```bash
+ssh osh-test
+cd /opt/osh-prod-release-new/releases/上一版/source
+cp /opt/osh-prod-release-new/current/.env .env
+docker compose up -d --build
+curl -fsS http://127.0.0.1:18080/actuator/health
+```
+
+如果前端页面错乱，优先回滚前端包和反代配置；如果后端接口报错，再回滚后端容器。治理库回滚要谨慎，先备份 PostgreSQL，再确认 Flyway 迁移影响。
 
 ## 浏览器连通性检查
 
@@ -107,6 +178,16 @@ docker compose up -d --build
 这个版本不会自动 SSH 到生产执行命令。即使页面点了“切绿”“同步蓝”或“回滚”，也只是写治理库状态和操作证据。
 
 生产 profile 启动前会检查 `APP_JWT_SECRET`、`OSH_DB_PASSWORD` 和 4 个种子用户密码。少配或使用默认弱值会直接启动失败。本地 `local` profile 只用于演练。
+
+生产上线治理台前，至少确认：
+
+- 发布包校验通过。
+- 服务器本地 `.env` 没有被覆盖。
+- PostgreSQL 治理库已备份。
+- `docker compose config` 通过。
+- `/actuator/health` 返回正常。
+- `scripts/smoke_release_flow.py` 在允许的测试环境跑通。
+- `https://osh.lol/` 主站根路径没有被治理台覆盖。
 
 要接入真实生产执行，需要再单独加执行器，并至少满足：
 

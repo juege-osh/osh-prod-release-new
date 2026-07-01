@@ -36,6 +36,28 @@
 - 前端是否监听 `127.0.0.1:18081`
 - 你访问的是治理台，不是主站首页
 
+## 3.1 治理台自身上线
+
+治理台也按发布包上线。先在本地或 CI 打包：
+
+```bash
+scripts/preflight.sh
+scripts/build_release_bundle.sh
+scripts/verify_release_bundle.sh release-bundles/osh-prod-release-*.tar.gz
+```
+
+包里会带源码、后端 jar、前端 dist、文档、脚本和校验清单。服务器只复用本地 `.env`，不要把真实密码放进发布包。
+
+上线后先测治理台自己：
+
+1. `/actuator/health` 正常。
+2. 可以登录。
+3. 可以新建变更单。
+4. 可以新增 SQL、配置、Kafka topic 和代码发布项。
+5. 单项 `分析`、`dry-run`、`执行`、`验证` 都能写记录。
+6. 报告闸门能拦住缺项，也能在补齐后放行。
+7. 回蓝和节点回滚能留操作记录。
+
 ## 4. 新建变更单
 
 1. 打开 `Change` 页。
