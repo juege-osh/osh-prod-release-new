@@ -93,7 +93,10 @@
           <article class="panel">
             <div class="section-head">
               <h3>变更单</h3>
-              <button class="primary" @click="createChange">新建演练单</button>
+              <div class="head-actions">
+                <button @click="createStepDemoChange">小步演示单</button>
+                <button class="primary" @click="createChange">全组件演练单</button>
+              </div>
             </div>
             <div class="change-list">
               <button v-for="change in changes" :key="change.id" :class="{ selected: selectedChange?.id === change.id }" @click="loadChange(change.id)">
@@ -794,6 +797,63 @@ async function createChange() {
   notice.value = '已创建演练单'
 }
 
+async function createStepDemoChange() {
+  await run(async () => {
+    const change = await post('/changes', {
+      title: '小步演示：MySQL SQL 单项上线',
+      projectBranch: 'release/20260708',
+      releaseType: 'NORMAL',
+      targetEnvCode: 'prod',
+      targetColor: 'green',
+      developerUsername: 'reviewer_a',
+      developerDisplayName: '评审 A',
+      demoRequired: true,
+      riskLevel: 'LOW',
+      summary: '只演示一条 MySQL SQL 上线项，方便从新增、编辑、dry-run、验证、切绿到回滚一步步看。',
+      componentKeys: ['mysql'],
+      contentJson: JSON.stringify({ demo: true, protectedModules: ['course', 'user'], prodWrite: 'manual-confirm-required' })
+    })
+    const item = change.items?.[0]
+    if (item?.id) {
+      const demoItem = defaultItemForm('MYSQL_SQL')
+      selectedChange.value = await post(`/changes/${change.id}/items/${item.id}`, {
+        ...itemUpdatePayload(demoItem),
+        title: '演示 MySQL SQL：单节点完整上线',
+        changeContent: '演示单节点 MySQL SQL 上线；不涉及课程模块和用户模块。',
+        riskAnalysis: '只写治理台演示库，真实生产执行前必须再次确认；课程模块和用户模块变化数必须为 0。'
+      })
+    } else {
+      selectedChange.value = change
+    }
+    await refreshAll()
+    if (selectedChange.value?.id) {
+      await loadChange(selectedChange.value.id)
+    }
+    notice.value = '已创建小步演示单'
+  })
+}
+
+function itemUpdatePayload(item) {
+  return {
+    ownerUsername: item.ownerUsername,
+    ownerDisplayName: item.ownerDisplayName,
+    title: item.title,
+    itemType: item.itemType,
+    payloadPath: item.payloadPath,
+    changeContent: item.changeContent,
+    executionContent: item.executionContent,
+    incrementalPlan: item.incrementalPlan,
+    rollbackContent: item.rollbackContent,
+    rollbackPlan: item.rollbackPlan,
+    codeChangeSummary: item.codeChangeSummary,
+    riskAnalysis: item.riskAnalysis,
+    bugAnalysis: item.bugAnalysis,
+    verificationCommands: item.verificationCommands,
+    testPlan: item.testPlan,
+    dataProbePlan: item.dataProbePlan
+  }
+}
+
 async function submitChange() {
   await operate(`/changes/${selectedChange.value.id}/submit`, '已提交评审')
 }
@@ -1126,37 +1186,36 @@ const NodeTable = {
     }
   },
   render() {
-    return h('table', { class: 'node-table' }, [
-      h('thead', [h('tr', ['顺序', '类型', '组件/上线项', '负责人', '载荷/风险', '规范', '双评审', '节点状态', '上线项状态', '单项操作', '编辑'].map((text) => h('th', text)))]),
-      h('tbody', this.nodes.map((node) => {
+    return h('div', { class: 'node-card-list' }, this.nodes.map((node) => {
         const item = this.findItem(node)
-        return h('tr', [
-          h('td', node.nodeOrder),
-          h('td', item.itemType || node.nodeType),
-          h('td', [
-            h('strong', item.title || node.componentName),
-            h('small', { class: 'block-muted' }, node.componentName)
+        return h('article', { class: 'node-card', 'data-testid': 'release-node-card', 'data-item-id': item.id || '' }, [
+          h('div', { class: 'node-card-main' }, [
+            h('span', { class: 'node-order' }, `#${node.nodeOrder}`),
+            h('div', [
+              h('strong', item.title || node.componentName),
+              h('small', { class: 'block-muted' }, `${node.componentName} · ${item.itemType || node.nodeType}`)
+            ]),
+            h('span', { class: 'status' }, item.lifecycleStatus || node.status)
           ]),
-          h('td', item.ownerDisplayName || '-'),
-          h('td', [
-            h('small', { class: 'block-muted strong-muted' }, item.payloadPath || '-'),
-            h('small', { class: 'block-muted' }, this.shortText(item.riskAnalysis))
+          h('div', { class: 'node-card-meta' }, [
+            h('span', `负责人：${item.ownerDisplayName || '-'}`),
+            h('span', `规范：${item.specStatus || '-'}`),
+            h('span', `双评审：${item.reviewerAConfirmed && item.reviewerBConfirmed ? '已齐' : '缺证据'}`),
+            h('span', `节点：${node.status}`)
           ]),
-          h('td', item.specStatus || '-'),
-          h('td', item.reviewerAConfirmed && item.reviewerBConfirmed ? '已齐' : '缺证据'),
-          h('td', node.status),
-          h('td', item.lifecycleStatus || '-'),
-          h('td', h('div', { class: 'item-actions' }, [
+          h('p', { class: 'node-card-path' }, item.payloadPath || '-'),
+          h('p', { class: 'node-card-risk' }, this.shortText(item.riskAnalysis)),
+          h('div', { class: 'item-actions' }, [
             h('button', { class: 'mini-button', onClick: () => this.$emit('operate-item', { item, action: 'analyze' }) }, '分析'),
             h('button', { class: 'mini-button', onClick: () => this.$emit('operate-item', { item, action: 'dry-run' }) }, 'dry-run'),
             h('button', { class: 'mini-button', onClick: () => this.$emit('operate-item', { item, action: 'execute' }) }, '执行'),
             h('button', { class: 'mini-button', onClick: () => this.$emit('operate-item', { item, action: 'verify' }) }, '验证'),
-            h('button', { class: 'mini-button danger-mini', onClick: () => this.$emit('operate-item', { item, action: 'rollback' }) }, '回滚')
-          ])),
-          h('td', h('button', { class: 'mini-button', onClick: () => this.$emit('edit-item', item) }, '编辑'))
+            h('button', { class: 'mini-button danger-mini', onClick: () => this.$emit('operate-item', { item, action: 'rollback' }) }, '回滚'),
+            h('button', { class: 'mini-button edit-mini', onClick: () => this.$emit('edit-item', item) }, '编辑')
+          ])
         ])
-      }))
-    ])
+      })
+    )
   }
 }
 

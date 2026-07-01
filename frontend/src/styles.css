@@ -215,6 +215,17 @@ textarea {
   flex-wrap: wrap;
 }
 
+.head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.head-actions button {
+  background: var(--blue);
+}
+
 .topbar h2 {
   margin: 0;
   font-size: clamp(30px, 4vw, 54px);
@@ -399,11 +410,66 @@ dd {
   background: var(--red);
 }
 
+.edit-mini {
+  background: var(--green);
+}
+
 .item-actions {
-  min-width: 240px;
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
+}
+
+.node-card-list {
+  display: grid;
+  gap: 14px;
+}
+
+.node-card {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: rgba(255, 252, 242, 0.72);
+  box-shadow: 0 12px 28px rgba(16, 32, 27, 0.06);
+}
+
+.node-card-main {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 12px;
+  align-items: start;
+}
+
+.node-order {
+  padding: 7px 10px;
+  border-radius: 999px;
+  color: #fffaf0;
+  background: var(--ink);
+  font-weight: 900;
+}
+
+.node-card-meta {
+  margin: 12px 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.node-card-meta span {
+  padding: 7px 10px;
+  border-radius: 999px;
+  color: var(--ink);
+  background: rgba(16, 32, 27, 0.08);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.node-card-path,
+.node-card-risk {
+  margin: 8px 0;
+  color: var(--muted);
+  line-height: 1.6;
+  word-break: break-all;
 }
 
 .view-tabs {
@@ -667,6 +733,10 @@ pre {
     display: block;
     overflow-x: auto;
     white-space: nowrap;
+  }
+
+  .node-card-main {
+    grid-template-columns: 1fr;
   }
 
   .environment-card {
