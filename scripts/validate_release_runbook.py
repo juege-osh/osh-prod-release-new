@@ -85,6 +85,8 @@ def main():
     require(not missing_smoke, "smoke release payloads missing: " + ", ".join(missing_smoke))
 
     require("操作手册" in frontend and "runbookGuides" in frontend, "frontend runbook page missing")
+    require("releaseOverview" in frontend and "上线总览" in frontend and "上线后结果" in frontend,
+            "frontend release overview missing")
     require("docs/COMMERCIAL_TEST_RUNBOOK.md" in readme, "README missing commercial runbook link")
 
     missing_terms = [term for term in REQUIRED_RUNBOOK_TERMS if term not in runbook]

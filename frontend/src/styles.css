@@ -335,6 +335,232 @@ dd {
   font-weight: 800;
 }
 
+.release-overview {
+  margin: 18px 0;
+  padding: 18px;
+  display: grid;
+  gap: 16px;
+  border: 1px solid rgba(38, 95, 115, 0.2);
+  border-radius: 26px;
+  background:
+    linear-gradient(135deg, rgba(255, 252, 242, 0.86), rgba(225, 244, 231, 0.54)),
+    radial-gradient(circle at 100% 0%, rgba(38, 95, 115, 0.16), transparent 22rem);
+  box-shadow: 0 14px 34px rgba(16, 32, 27, 0.08);
+}
+
+.overview-hero {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 18px;
+  align-items: center;
+}
+
+.overview-hero h4,
+.overview-hero p {
+  margin: 0;
+}
+
+.overview-hero h4 {
+  font-size: clamp(24px, 4vw, 42px);
+  line-height: 1;
+  letter-spacing: -0.05em;
+}
+
+.overview-hero p:not(.eyebrow) {
+  margin-top: 10px;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.overview-progress {
+  width: 132px;
+  height: 132px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at center, #fffaf0 0 56%, transparent 57%),
+    conic-gradient(var(--green) var(--progress), rgba(16, 32, 27, 0.12) 0);
+}
+
+.overview-progress strong {
+  font-size: 28px;
+  line-height: 1;
+}
+
+.overview-progress span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.overview-metrics,
+.overview-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.overview-metrics {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.overview-metrics article {
+  padding: 13px;
+  display: grid;
+  gap: 4px;
+  border: 1px solid rgba(16, 32, 27, 0.08);
+  border-radius: 18px;
+  background: rgba(255, 252, 242, 0.72);
+}
+
+.overview-metrics article.success {
+  border-color: rgba(33, 122, 84, 0.28);
+  background: rgba(225, 244, 231, 0.7);
+}
+
+.overview-metrics article.warn {
+  border-color: rgba(185, 130, 45, 0.26);
+  background: rgba(255, 246, 220, 0.68);
+}
+
+.overview-metrics article.danger {
+  border-color: rgba(182, 66, 50, 0.28);
+  background: rgba(255, 237, 226, 0.76);
+}
+
+.overview-metrics span,
+.overview-metrics small {
+  color: var(--muted);
+}
+
+.overview-metrics strong {
+  font-size: 25px;
+}
+
+.overview-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.overview-card {
+  min-height: 236px;
+  padding: 16px;
+  display: grid;
+  gap: 14px;
+  align-content: start;
+  border: 1px solid rgba(16, 32, 27, 0.1);
+  border-radius: 22px;
+  background: rgba(255, 252, 242, 0.66);
+}
+
+.node-status-bars,
+.operation-coverage {
+  display: grid;
+  gap: 10px;
+}
+
+.node-status-bars div {
+  position: relative;
+  min-height: 36px;
+  padding: 9px 10px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+  overflow: hidden;
+  border-radius: 12px;
+  background: rgba(16, 32, 27, 0.06);
+}
+
+.node-status-bars i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: rgba(33, 122, 84, 0.18);
+}
+
+.node-status-bars span,
+.node-status-bars strong {
+  position: relative;
+  z-index: 1;
+}
+
+.report-checks,
+.result-steps,
+.protected-modules,
+.risk-distribution {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.report-checks button,
+.result-steps span,
+.protected-modules span,
+.risk-distribution span {
+  padding: 8px 10px;
+  border-radius: 999px;
+  color: var(--ink);
+  background: rgba(16, 32, 27, 0.08);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.report-checks button.passed,
+.result-steps span.done,
+.protected-modules span.safe {
+  color: #fffaf0;
+  background: var(--green);
+}
+
+.result-steps span.danger,
+.protected-modules span.danger {
+  color: #fffaf0;
+  background: var(--red);
+}
+
+.protected-modules {
+  padding-top: 12px;
+  border-top: 1px solid rgba(16, 32, 27, 0.1);
+}
+
+.protected-modules strong {
+  width: 100%;
+}
+
+.operation-coverage div {
+  display: grid;
+  grid-template-columns: 72px 54px 1fr;
+  gap: 10px;
+  align-items: center;
+}
+
+.operation-coverage progress {
+  width: 100%;
+  height: 10px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(16, 32, 27, 0.1);
+}
+
+.operation-coverage progress::-webkit-progress-bar {
+  background: rgba(16, 32, 27, 0.1);
+}
+
+.operation-coverage progress::-webkit-progress-value {
+  border-radius: 999px;
+  background: var(--green);
+}
+
+.operation-coverage progress::-moz-progress-bar {
+  border-radius: 999px;
+  background: var(--green);
+}
+
+.risk-distribution {
+  padding-top: 4px;
+}
+
 .readiness-card {
   margin: 18px 0;
   padding: 16px;
@@ -1063,6 +1289,9 @@ pre {
   .report-grid,
   .runbook-grid,
   .runbook-columns,
+  .overview-hero,
+  .overview-metrics,
+  .overview-grid,
   .action-catalog,
   .payload-guide,
   .readiness-card,
@@ -1070,6 +1299,12 @@ pre {
   .change-tabs,
   .workflow-grid {
     grid-template-columns: 1fr;
+  }
+
+  .overview-progress {
+    width: 112px;
+    height: 112px;
+    justify-self: start;
   }
 
   .readiness-pills {

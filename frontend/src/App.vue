@@ -124,6 +124,99 @@
                 <span>操作 {{ selectedChange.operations?.length || 0 }}</span>
               </div>
 
+              <section class="release-overview">
+                <div class="overview-hero">
+                  <div>
+                    <p class="eyebrow">上线总览</p>
+                    <h4>{{ releaseOverview.status.label }}</h4>
+                    <p>{{ releaseOverview.summary }}</p>
+                  </div>
+                  <div class="overview-progress" :style="{ '--progress': `${releaseOverview.progressPercent}%` }">
+                    <strong>{{ releaseOverview.progressPercent }}%</strong>
+                    <span>整体进度</span>
+                  </div>
+                </div>
+
+                <div class="overview-metrics">
+                  <article v-for="metric in releaseOverview.metrics" :key="metric.label" :class="metric.tone">
+                    <span>{{ metric.label }}</span>
+                    <strong>{{ metric.value }}</strong>
+                    <small>{{ metric.copy }}</small>
+                  </article>
+                </div>
+
+                <div class="overview-grid">
+                  <article class="overview-card">
+                    <div class="compact-head">
+                      <h4>节点状态</h4>
+                      <p>失败和回滚会单独标红，不和已完成混在一起。</p>
+                    </div>
+                    <div class="node-status-bars">
+                      <div v-for="entry in releaseOverview.nodeStates" :key="entry.key">
+                        <span>{{ entry.label }}</span>
+                        <strong>{{ entry.count }}</strong>
+                        <i :style="{ width: `${entry.percent}%` }"></i>
+                      </div>
+                    </div>
+                  </article>
+
+                  <article class="overview-card">
+                    <div class="compact-head">
+                      <h4>报告闸门</h4>
+                      <p>五类报告都通过，才有资格切绿。</p>
+                    </div>
+                    <div class="report-checks">
+                      <button
+                        v-for="report in releaseOverview.reportChecks"
+                        :key="report.type"
+                        :class="{ passed: report.passed }"
+                        @click="jumpToGap('gates')"
+                      >
+                        {{ report.label }}
+                      </button>
+                    </div>
+                  </article>
+
+                  <article class="overview-card">
+                    <div class="compact-head">
+                      <h4>单项操作覆盖</h4>
+                      <p>每条上线项都要跑完分析、dry-run、执行和验证。</p>
+                    </div>
+                    <div class="operation-coverage">
+                      <div v-for="step in releaseOverview.operationCoverage" :key="step.key">
+                        <span>{{ step.label }}</span>
+                        <strong>{{ step.done }}/{{ step.total }}</strong>
+                        <progress :value="step.done" :max="step.total || 1"></progress>
+                      </div>
+                    </div>
+                  </article>
+
+                  <article class="overview-card result-card">
+                    <div class="compact-head">
+                      <h4>上线后结果</h4>
+                      <p>{{ releaseOverview.resultSummary }}</p>
+                    </div>
+                    <div class="result-steps">
+                      <span v-for="step in releaseOverview.resultSteps" :key="step.key" :class="{ done: step.done, danger: step.danger }">
+                        {{ step.label }}
+                      </span>
+                    </div>
+                    <div class="protected-modules">
+                      <strong>重点保护</strong>
+                      <span v-for="module in releaseOverview.protectedModules" :key="module.key" :class="module.tone">
+                        {{ module.label }}：{{ module.summary }}
+                      </span>
+                    </div>
+                  </article>
+                </div>
+
+                <div class="risk-distribution">
+                  <span v-for="risk in releaseOverview.riskDistribution" :key="risk.key">
+                    {{ risk.label }} {{ risk.count }}
+                  </span>
+                </div>
+              </section>
+
               <div class="readiness-card" :class="{ ready: localReadiness.ready }">
                 <div>
                   <strong>{{ localReadiness.ready ? '上线前检查已齐' : '上线前还差这些' }}</strong>
@@ -1032,6 +1125,7 @@ const typeTemplates = {
 const currentTitle = computed(() => navItems.find((item) => item.key === page.value)?.label || '总览')
 const prettyReports = computed(() => JSON.stringify(selectedChange.value?.reports || [], null, 2))
 const localReadiness = computed(() => buildLocalReadiness(selectedChange.value))
+const releaseOverview = computed(() => buildReleaseOverview(selectedChange.value, localReadiness.value))
 
 async function login() {
   await run(async () => {
@@ -1559,6 +1653,244 @@ function inferComponentKeyForUi(itemType) {
     COMPONENT: 'docker-compose'
   }
   return mapping[itemType] || 'nacos'
+}
+
+function buildReleaseOverview(change, readiness) {
+  if (!change) {
+    return emptyReleaseOverview()
+  }
+  const items = change.items || []
+  const nodes = change.nodes || []
+  const reports = change.reports || []
+  const operations = change.operations || []
+  const nodeStats = buildNodeStats(nodes)
+  const reportChecks = buildReportChecks(reports)
+  const operationCoverage = buildOperationCoverage(items, operations)
+  const resultFlags = buildResultFlags(change, operations)
+  const reviewDone = items.filter((item) => item.reviewerAConfirmed && item.reviewerBConfirmed).length
+  const reportsPassed = reportChecks.filter((report) => report.passed).length
+  const actionDone = operationCoverage.reduce((sum, step) => sum + step.done, 0)
+  const actionTotal = operationCoverage.reduce((sum, step) => sum + step.total, 0)
+  const resultDone = resultFlags.switchGreen + resultFlags.manualVerify + resultFlags.syncBlue
+  const progressDone = actionDone + reportsPassed + reviewDone + resultDone
+  const progressTotal = actionTotal + reportChecks.length + items.length + 3
+  const status = statusLabel(change.status)
+  const progressPercent = percent(progressDone, progressTotal)
+  const blockerCount = readiness?.missing?.length || 0
+  const resultSummary = releaseResultSummary(change, resultFlags)
+
+  return {
+    status,
+    progressPercent,
+    summary: blockerCount
+      ? `${status.label}，还有 ${blockerCount} 个缺口。先补红色项，再看报告。`
+      : `${status.label}，上线前闸门已齐，继续看上线后结果。`,
+    metrics: [
+      { label: '总节点', value: nodes.length, copy: '本次上线拆分出的执行节点', tone: 'neutral' },
+      { label: '已完成', value: nodeStats.done, copy: 'PASSED 或已同步蓝', tone: 'success' },
+      { label: '失败', value: nodeStats.failed, copy: '需要先处理再继续', tone: nodeStats.failed ? 'danger' : 'neutral' },
+      { label: '回滚', value: nodeStats.rolledBack, copy: '已进入回滚链路的节点', tone: nodeStats.rolledBack ? 'danger' : 'neutral' },
+      { label: '报告', value: `${reportsPassed}/${reportChecks.length}`, copy: '规范、环境、announce、功能、数据', tone: reportsPassed === reportChecks.length ? 'success' : 'warn' },
+      { label: '双评审', value: `${reviewDone}/${items.length || 0}`, copy: '每个上线项两人测试留证据', tone: reviewDone === items.length && items.length ? 'success' : 'warn' }
+    ],
+    nodeStates: [
+      { key: 'done', label: '已完成', count: nodeStats.done, percent: percent(nodeStats.done, nodes.length) },
+      { key: 'pending', label: '待处理', count: nodeStats.pending, percent: percent(nodeStats.pending, nodes.length) },
+      { key: 'running', label: '执行中', count: nodeStats.running, percent: percent(nodeStats.running, nodes.length) },
+      { key: 'failed', label: '失败', count: nodeStats.failed, percent: percent(nodeStats.failed, nodes.length) },
+      { key: 'rolled', label: '已回滚', count: nodeStats.rolledBack, percent: percent(nodeStats.rolledBack, nodes.length) }
+    ],
+    reportChecks,
+    operationCoverage,
+    resultSummary,
+    resultSteps: [
+      { key: 'switch-green', label: resultFlags.switchGreen ? '已切绿' : '未切绿', done: !!resultFlags.switchGreen },
+      { key: 'manual', label: resultFlags.manualVerify ? '人工验证已过' : '待人工验证', done: !!resultFlags.manualVerify },
+      { key: 'sync-blue', label: resultFlags.syncBlue ? '已同步蓝' : '待同步蓝', done: !!resultFlags.syncBlue },
+      { key: 'rollback', label: resultFlags.rollback ? '已回蓝/回滚' : '未触发回滚', done: !!resultFlags.rollback, danger: !!resultFlags.rollback }
+    ],
+    protectedModules: buildProtectedModules(reports),
+    riskDistribution: buildRiskDistribution(items)
+  }
+}
+
+function emptyReleaseOverview() {
+  return {
+    status: statusLabel('DRAFT'),
+    progressPercent: 0,
+    summary: '先选一个变更单。',
+    metrics: [],
+    nodeStates: [],
+    reportChecks: [],
+    operationCoverage: [],
+    resultSummary: '还没有上线结果。',
+    resultSteps: [],
+    protectedModules: [],
+    riskDistribution: []
+  }
+}
+
+function buildNodeStats(nodes) {
+  return nodes.reduce((stats, node) => {
+    const status = node.status || 'PENDING'
+    if (['PASSED', 'SYNCED_TO_BLUE'].includes(status)) {
+      stats.done += 1
+    } else if (status === 'FAILED') {
+      stats.failed += 1
+    } else if (status === 'ROLLED_BACK') {
+      stats.rolledBack += 1
+    } else if (status === 'RUNNING') {
+      stats.running += 1
+    } else {
+      stats.pending += 1
+    }
+    return stats
+  }, { done: 0, failed: 0, rolledBack: 0, running: 0, pending: 0 })
+}
+
+function buildReportChecks(reports) {
+  const types = [
+    { type: 'SPEC', label: '规范' },
+    { type: 'ENV_DIFF', label: '环境差异' },
+    { type: 'ANNOUNCE', label: 'announce' },
+    { type: 'FUNCTION', label: '功能' },
+    { type: 'DATA', label: '数据' }
+  ]
+  return types.map((item) => ({
+    ...item,
+    passed: reports.some((report) => report.reportType === item.type && report.passed)
+  }))
+}
+
+function buildOperationCoverage(items, operations) {
+  const steps = [
+    { key: 'analyze', label: '分析', type: 'ITEM_ANALYZE' },
+    { key: 'dry-run', label: 'dry-run', type: 'ITEM_DRY_RUN' },
+    { key: 'execute', label: '执行', type: 'ITEM_EXECUTE' },
+    { key: 'verify', label: '验证', type: 'ITEM_VERIFY' }
+  ]
+  return steps.map((step) => ({
+    ...step,
+    done: items.filter((item) => itemOperationReady(operations, item, step.type)).length,
+    total: items.length
+  }))
+}
+
+function buildResultFlags(change, operations) {
+  const hasOperation = (type) => operations.some((operation) => operation.operationType === type)
+  return {
+    switchGreen: hasOperation('SWITCH_TO_GREEN') || ['SWITCHED', 'VERIFIED', 'RELEASED'].includes(change.status),
+    manualVerify: hasOperation('PROD_MANUAL_VERIFY') || ['VERIFIED', 'RELEASED'].includes(change.status),
+    syncBlue: hasOperation('SYNC_GREEN_TO_BLUE') || change.status === 'RELEASED',
+    rollback: hasOperation('SWITCH_BACK_BLUE')
+      || hasOperation('NODE_ROLLBACK')
+      || hasOperation('ITEM_ROLLBACK')
+      || change.status === 'ROLLED_BACK'
+  }
+}
+
+function releaseResultSummary(change, resultFlags) {
+  if (resultFlags.rollback || change.status === 'ROLLED_BACK') {
+    return '已出现回蓝或回滚记录，先复查操作链和数据报告。'
+  }
+  if (resultFlags.syncBlue) {
+    return '绿系统验证通过，已记录同步蓝，闭环基本完成。'
+  }
+  if (resultFlags.manualVerify) {
+    return '绿系统已人工验证，下一步同步蓝系统。'
+  }
+  if (resultFlags.switchGreen) {
+    return '已经切到绿系统，等待负责人做生产人工验证。'
+  }
+  return '还没切绿，继续补齐报告闸门和评审证据。'
+}
+
+function buildProtectedModules(reports) {
+  const dataReport = reports.find((report) => report.reportType === 'DATA')
+  const detail = safeJsonParse(dataReport?.detailJson)
+  return [
+    protectedModuleSummary('course', '课程模块', detail, !!dataReport),
+    protectedModuleSummary('user', '用户模块', detail, !!dataReport)
+  ]
+}
+
+function protectedModuleSummary(key, label, detail, hasReport) {
+  if (!hasReport) {
+    return { key, label, summary: '待数据报告', tone: 'wait' }
+  }
+  const table = Array.isArray(detail?.tables)
+    ? detail.tables.find((item) => item.module === key)
+    : null
+  const added = Number(table?.added || detail?.[key]?.added || 0)
+  const removed = Number(table?.removed || detail?.[key]?.removed || 0)
+  const changed = Number(table?.changed || detail?.[key]?.changed || detail?.mysql?.[`${key}Changed`] || 0)
+  const clean = added === 0 && removed === 0 && changed === 0
+  return {
+    key,
+    label,
+    summary: clean ? '未发现变化' : `新增 ${added} / 删除 ${removed} / 变化 ${changed}`,
+    tone: clean ? 'safe' : 'danger'
+  }
+}
+
+function buildRiskDistribution(items) {
+  const buckets = [
+    { key: 'sql', label: 'SQL/DDL', types: ['MYSQL_SQL', 'SQL', 'HBASE_DDL', 'MONGODB_SCRIPT'] },
+    { key: 'config', label: '配置', match: (type) => type === 'CONFIG' || type.endsWith('_CONFIG') },
+    { key: 'code', label: '代码', types: ['CODE'] },
+    { key: 'middleware', label: '中间件对象', types: ['ES_INDEX', 'KAFKA_TOPIC', 'XXLJOB_TASK', 'FLINK_JOB', 'QDRANT_COLLECTION', 'REDIS_SCRIPT'] },
+    { key: 'component', label: '组件', types: ['COMPONENT', 'COMPOSE_CHANGE'] }
+  ]
+  return buckets.map((bucket) => ({
+    key: bucket.key,
+    label: bucket.label,
+    count: items.filter((item) => {
+      const type = item.itemType || ''
+      return bucket.match ? bucket.match(type) : bucket.types.includes(type)
+    }).length
+  }))
+}
+
+function itemOperationReady(operations, item, type) {
+  return operations.some((operation) =>
+    operation.operationType === type
+      && ['PASSED', 'RECORDED'].includes(operation.operationStatus)
+      && operationMatchesUiItem(operation, item)
+  )
+}
+
+function statusLabel(status) {
+  const mapping = {
+    DRAFT: '草稿',
+    SUBMITTED: '已提交',
+    REVIEWING: '评审中',
+    APPROVED: '审批已过',
+    TESTING: '自动化测试中',
+    SWITCHED: '已切绿',
+    VERIFIED: '人工验证通过',
+    RELEASED: '已发布',
+    ROLLED_BACK: '已回蓝/回滚',
+    REJECTED: '已驳回'
+  }
+  return { raw: status || 'DRAFT', label: mapping[status] || status || '草稿' }
+}
+
+function safeJsonParse(value) {
+  if (!value) {
+    return null
+  }
+  try {
+    return JSON.parse(value)
+  } catch (err) {
+    return null
+  }
+}
+
+function percent(done, total) {
+  if (!total) {
+    return 0
+  }
+  return Math.round((done / total) * 100)
 }
 
 function buildLocalReadiness(change) {
